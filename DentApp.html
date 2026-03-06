@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DentApp - Стоматологический онлайн-сервис</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <i class="fas fa-tooth"></i>
+                <span>DentApp</span>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="#" class="nav-link active" data-page="home">Главная</a></li>
+                    <li><a href="#" class="nav-link" data-page="dashboard">Личный кабинет</a></li>
+                    <li><a href="#" class="nav-link" data-page="appointment">Запись на прием</a></li>
+                    <li><a href="#" class="nav-link" data-page="diagnosis">Диагностика</a></li>
+                    <li><a href="#" class="nav-link" data-page="history">История посещений</a></li>
+                    <li><a href="#" class="nav-link" data-page="schedule">Расписание (для врачей)</a></li>
+                </ul>
+            </nav>
+            <div class="auth-buttons" id="authButtons">
+                <button class="btn btn-outline" id="loginBtn">Вход</button>
+                <button class="btn btn-primary" id="registerBtn">Регистрация</button>
+            </div>
+            <div class="user-info" id="userInfo" style="display: none;">
+                <div class="user-avatar" id="userAvatar">ИИ</div>
+                <div>
+                    <div id="userName">Иван Иванов</div>
+                    <button class="btn btn-outline btn-sm" id="logoutBtn">Выйти</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Home Page -->
+        <section id="home" class="main-content active">
+            <div class="hero">
+                <h1>DentApp - современный стоматологический сервис</h1>
+                <p>Записывайтесь на прием к стоматологу онлайн, проходите предварительную диагностику и управляйте своей историей посещений в удобном личном кабинете.</p>
+                <button class="btn btn-secondary" id="startAppointment">Записаться на прием</button>
+            </div>
+            
+            <h2 class="page-title">Наши возможности</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <i class="fas fa-calendar-check"></i>
+                    <h3>Запись на прием</h3>
+                    <p>Выбор врача, услуги и удобного времени для посещения стоматологической клиники.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-stethoscope"></i>
+                    <h3>Предварительная диагностика</h3>
+                    <p>Онлайн-опрос о симптомах для предварительной оценки состояния и рекомендаций.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-history"></i>
+                    <h3>История посещений</h3>
+                    <p>Просмотр истории всех ваших посещений, диагнозов и рекомендаций врачей.</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-user-md"></i>
+                    <h3>Личный кабинет</h3>
+                    <p>Управление личными данными, просмотр предстоящих приемов и истории лечения.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="main-content">
+            <div class="dashboard-header">
+                <h2 class="page-title">Личный кабинет</h2>
+                <button class="btn btn-outline" id="editProfileBtn">Редактировать профиль</button>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-avatar" id="dashboardUserAvatar">ИИ</div>
+                <div>
+                    <h3 id="dashboardUserName">Иван Иванов</h3>
+                    <p id="dashboardUserEmail">ivan@example.com</p>
+                    <p id="dashboardUserPhone">+7 (123) 456-78-90</p>
+                </div>
+            </div>
+            
+            <div class="dashboard-cards">
+                <div class="dashboard-card">
+                    <div class="card-title">
+                        <i class="fas fa-calendar-alt"></i>
+                        <h3>Ближайшие приемы</h3>
+                    </div>
+                    <div id="upcomingAppointments">
+                        <p>У вас нет запланированных приемов</p>
+                    </div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <div class="card-title">
+                        <i class="fas fa-chart-line"></i>
+                        <h3>Статистика посещений</h3>
+                    </div>
+                    <div id="visitStats">
+                        <p>Всего посещений: <strong>0</strong></p>
+                        <p>Последний визит: <strong>нет данных</strong></p>
+                    </div>
+                </div>
+                
+                <div class="dashboard-card">
+                    <div class="card-title">
+                        <i class="fas fa-cog"></i>
+                        <h3>Быстрые действия</h3>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="btn btn-primary" id="quickAppointmentBtn">Записаться на прием</button>
+                        <button class="btn btn-outline" id="quickDiagnosisBtn">Пройти диагностику</button>
+                        <button class="btn btn-outline" id="viewHistoryBtn">Посмотреть историю</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Appointment Page -->
+        <section id="appointment" class="main-content">
+            <h2 class="page-title">Запись на прием</h2>
+            
+            <div class="appointment-steps">
+                <div class="step active" data-step="1">
+                    <div class="step-number">1</div>
+                    <div class="step-title">Выбор услуги</div>
+                </div>
+                <div class="step" data-step="2">
+                    <div class="step-number">2</div>
+                    <div class="step-title">Выбор врача</div>
+                </div>
+                <div class="step" data-step="3">
+                    <div class="step-number">3</div>
+                    <div class="step-title">Выбор времени</div>
+                </div>
+                <div class="step" data-step="4">
+                    <div class="step-number">4</div>
+                    <div class="step-title">Подтверждение</div>
+                </div>
+            </div>
+            
+            <!-- Step 1: Service Selection -->
+            <div id="step1" class="appointment-form-section active">
+                <h3>Выберите услугу</h3>
+                <div class="form-group">
+                    <select id="serviceSelect">
+                        <option value="">-- Выберите услугу --</option>
+                        <option value="therapy">Терапия (лечение кариеса)</option>
+                        <option value="hygiene">Гигиена и чистка</option>
+                        <option value="surgery">Хирургия (удаление зубов)</option>
+                        <option value="orthodontics">Ортодонтия (брекеты)</option>
+                        <option value="prosthetics">Протезирование</option>
+                        <option value="diagnostics">Диагностика и консультация</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" id="nextStep1">Далее →</button>
+            </div>
+            
+            <!-- Step 2: Doctor Selection -->
+            <div id="step2" class="appointment-form-section">
+                <h3>Выберите врача</h3>
+                <div class="doctors-grid" id="doctorsGrid">
+                    <!-- Doctors will be populated by JS -->
+                </div>
+                <div style="display: flex; gap: 15px; margin-top: 30px;">
+                    <button class="btn btn-outline" id="prevStep2">← Назад</button>
+                    <button class="btn btn-primary" id="nextStep2">Далее →</button>
+                </div>
+            </div>
+            
+            <!-- Step 3: Time Selection -->
+            <div id="step3" class="appointment-form-section">
+                <h3>Выберите дату и время</h3>
+                <div class="form-group">
+                    <label for="appointmentDate">Дата приема:</label>
+                    <input type="date" id="appointmentDate">
+                </div>
+                <div id="timeSlotsContainer">
+                    <p>Выберите дату для просмотра доступных слотов</p>
+                </div>
+                <div style="display: flex; gap: 15px; margin-top: 30px;">
+                    <button class="btn btn-outline" id="prevStep3">← Назад</button>
+                    <button class="btn btn-primary" id="nextStep3">Далее →</button>
+                </div>
+            </div>
+            
+            <!-- Step 4: Confirmation -->
+            <div id="step4" class="appointment-form-section">
+                <h3>Подтверждение записи</h3>
+                <div id="appointmentSummary">
+                    <!-- Appointment summary will be populated by JS -->
+                </div>
+                <div style="display: flex; gap: 15px; margin-top: 30px;">
+                    <button class="btn btn-outline" id="prevStep4">← Назад</button>
+                    <button class="btn btn-primary" id="confirmAppointment">Подтвердить запись</button>
+                </div>
+            </div>
+            
+            <div id="appointmentSuccess" style="display: none; margin-top: 30px;">
+                <div class="success-message" style="display: block; padding: 20px; background-color: rgba(42, 157, 143, 0.1); border-radius: var(--border-radius);">
+                    <h3 style="color: var(--success);">Запись успешно создана!</h3>
+                    <p>Вы записаны на прием. Уведомление отправлено вам и врачу.</p>
+                    <button class="btn btn-primary" id="newAppointmentBtn">Создать новую запись</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Diagnosis Page -->
+        <section id="diagnosis" class="main-content">
+            <h2 class="page-title">Предварительная диагностика</h2>
+            <div class="diagnosis-container">
+                <div id="diagnosisIntro">
+                    <h3>Опрос о симптомах</h3>
+                    <p>Ответьте на несколько вопросов о ваших симптомах, чтобы получить предварительную оценку состояния и рекомендации по специалисту.</p>
+                    <button class="btn btn-primary" id="startDiagnosisBtn">Начать диагностику</button>
+                </div>
+                
+                <div id="diagnosisQuestions" style="display: none;">
+                    <!-- Questions will be populated by JS -->
+                </div>
+                
+                <div id="diagnosisResult" class="diagnosis-result">
+                    <!-- Result will be populated by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- History Page -->
+        <section id="history" class="main-content">
+            <h2 class="page-title">История посещений</h2>
+            <div class="history-container">
+                <div class="history-filter">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="historyFilter">Фильтр по врачу:</label>
+                        <select id="historyFilter">
+                            <option value="all">Все врачи</option>
+                            <option value="1">Петров А.В.</option>
+                            <option value="2">Сидорова И.П.</option>
+                            <option value="3">Козлов С.Д.</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="historyDateFrom">С:</label>
+                        <input type="date" id="historyDateFrom">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="historyDateTo">По:</label>
+                        <input type="date" id="historyDateTo">
+                    </div>
+                    <button class="btn btn-primary" id="applyHistoryFilter" style="align-self: flex-end;">Применить</button>
+                </div>
+                
+                <div id="historyList" class="history-list">
+                    <p id="emptyHistoryMessage">История посещений пуста</p>
+                    <!-- History items will be populated by JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Schedule Page (for doctors) -->
+        <section id="schedule" class="main-content">
+            <h2 class="page-title">Управление расписанием (для врачей)</h2>
+            <div class="schedule-container">
+                <div class="schedule-header">
+                    <h3>Расписание приемов</h3>
+                    <button class="btn btn-primary" id="addScheduleSlotBtn">Добавить слот</button>
+                </div>
+                
+                <div class="calendar">
+                    <div class="calendar-header">
+                        <button class="btn btn-outline" id="prevMonthBtn">← Предыдущий месяц</button>
+                        <h4 id="currentMonth">Июль 2023</h4>
+                        <button class="btn btn-outline" id="nextMonthBtn">Следующий месяц →</button>
+                    </div>
+                    <div class="calendar-days" id="calendarDays">
+                        <!-- Calendar days will be populated by JS -->
+                    </div>
+                </div>
+                
+                <div id="daySchedule">
+                    <h4 style="margin-bottom: 20px;">Расписание на <span id="selectedDateText">выбранную дату</span></h4>
+                    <div class="time-slots" id="scheduleTimeSlots">
+                        <!-- Time slots will be populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Auth Modal -->
+        <div id="authModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+            <div class="auth-container">
+                <div class="auth-tabs">
+                    <button class="auth-tab active" id="loginTab">Вход</button>
+                    <button class="auth-tab" id="registerTab">Регистрация</button>
+                </div>
+                
+                <!-- Login Form -->
+                <form id="loginForm" class="auth-form active">
+                    <div class="form-group">
+                        <label for="loginEmail">Email или телефон</label>
+                        <input type="text" id="loginEmail" required>
+                        <div class="error-message" id="loginEmailError"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Пароль</label>
+                        <input type="password" id="loginPassword" required>
+                        <div class="error-message" id="loginPasswordError"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Войти</button>
+                    <div class="success-message" id="loginSuccess"></div>
+                </form>
+                
+                <!-- Registration Form -->
+                <form id="registerForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="registerName">ФИО</label>
+                        <input type="text" id="registerName" required>
+                        <div class="error-message" id="registerNameError"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPhone">Телефон</label>
+                        <input type="tel" id="registerPhone" required>
+                        <div class="error-message" id="registerPhoneError"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerEmail">Email</label>
+                        <input type="email" id="registerEmail" required>
+                        <div class="error-message" id="registerEmailError"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerPassword">Пароль</label>
+                        <input type="password" id="registerPassword" required>
+                        <div class="error-message" id="registerPasswordError"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="registerConfirmPassword">Подтверждение пароля</label>
+                        <input type="password" id="registerConfirmPassword" required>
+                        <div class="error-message" id="registerConfirmPasswordError"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Зарегистрироваться</button>
+                    <div class="success-message" id="registerSuccess"></div>
+                </form>
+                
+                <button class="btn btn-outline" id="closeAuthModal" style="width: 100%; margin-top: 20px;">Отмена</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container footer-content">
+            <div class="footer-section">
+                <h3>DentApp</h3>
+                <p>Современный стоматологический онлайн-сервис для записи на прием, диагностики и управления историей посещений.</p>
+            </div>
+            <div class="footer-section">
+                <h3>Основные функции</h3>
+                <ul class="footer-links">
+                    <li><a href="#" data-page="appointment">Запись на прием</a></li>
+                    <li><a href="#" data-page="diagnosis">Предварительная диагностика</a></li>
+                    <li><a href="#" data-page="history">История посещений</a></li>
+                    <li><a href="#" data-page="dashboard">Личный кабинет</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Контакты</h3>
+                <ul class="footer-links">
+                    <li><i class="fas fa-phone"></i> +7 (800) 123-45-67</li>
+                    <li><i class="fas fa-envelope"></i> info@dentapp.ru</li>
+                    <li><i class="fas fa-map-marker-alt"></i> Москва, ул. Стоматологическая, 15</li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js" defer></script>
+</body>
+</html>
