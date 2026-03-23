@@ -1,0 +1,1123 @@
+openapi: 3.0.0
+info:
+  title: DentApp API
+  description: API для стоматологического онлайн-сервиса. Позволяет управлять пользователями, записью на приём, расписанием врачей, историей посещений и предварительной диагностикой.
+  version: 1.0.0
+  contact:
+    name: Команда DentApp
+    email: support@dentapp.ru
+servers:
+  - url: http://localhost:3000/api
+    description: Локальный сервер разработки
+  - url: https://api.dentapp.ru/v1
+    description: Продакшн сервер
+
+tags:
+  - name: Auth
+    description: Аутентификация и управление профилем
+  - name: Users
+    description: Управление пользователями (для администраторов)
+  - name: Doctors
+    description: Информация о врачах
+  - name: Services
+    description: Услуги клиники
+  - name: Appointments
+    description: Запись на приём
+  - name: Schedule
+    description: Расписание врачей
+  - name: Visits
+    description: История посещений
+  - name: Diagnosis
+    description: Предварительная диагностика
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Введите JWT токен, полученный при входе
+
+  schemas:
+    # ---------- Базовые модели ----------
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Иван Иванов"
+        email:
+          type: string
+          format: email
+          example: "ivan@example.com"
+        phone:
+          type: string
+          example: "+7 (123) 456-78-90"
+        role:
+          type: string
+          enum: [patient, doctor, admin]
+          example: "patient"
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - role
+
+    Doctor:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: "Петров Алексей Владимирович"
+        specialty:
+          type: string
+          example: "Терапевт, хирург"
+        experience_years:
+          type: integer
+          example: 12
+        rating:
+          type: number
+          format: float
+          example: 4.8
+        bio:
+          type: string
+          example: "Врач высшей категории, стаж 12 лет"
+      required:
+        - id
+        - name
+        - specialty
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Лечение кариеса"
+        description:
+          type: string
+          example: "Лечение кариеса любой сложности"
+        duration_minutes:
+          type: integer
+          example: 60
+        price:
+          type: number
+          format: float
+          example: 3500.00
+      required:
+        - id
+        - name
+        - price
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 101
+        patient_id:
+          type: integer
+          example: 1
+        doctor_id:
+          type: integer
+          example: 2
+        service_id:
+          type: integer
+          example: 1
+        appointment_date:
+          type: string
+          format: date
+          example: "2023-08-15"
+        appointment_time:
+          type: string
+          format: time
+          example: "10:00"
+        status:
+          type: string
+          enum: [scheduled, completed, cancelled]
+          example: "scheduled"
+        notes:
+          type: string
+          example: "Просьба не задерживаться"
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - patient_id
+        - doctor_id
+        - service_id
+        - appointment_date
+        - appointment_time
+        - status
+
+    ScheduleSlot:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 501
+        doctor_id:
+          type: integer
+          example: 2
+        slot_date:
+          type: string
+          format: date
+          example: "2023-08-15"
+        slot_time:
+          type: string
+          format: time
+          example: "10:00"
+        is_available:
+          type: boolean
+          example: true
+      required:
+        - id
+        - doctor_id
+        - slot_date
+        - slot_time
+        - is_available
+
+    Visit:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 201
+        appointment_id:
+          type: integer
+          nullable: true
+          example: 101
+        patient_id:
+          type: integer
+          example: 1
+        doctor_id:
+          type: integer
+          example: 2
+        service_id:
+          type: integer
+          example: 1
+        visit_date:
+          type: string
+          format: date
+          example: "2023-08-15"
+        diagnosis:
+          type: string
+          example: "Кариес жевательной поверхности"
+        recommendations:
+          type: string
+          example: "Чистка зубов 2 раза в день, использование зубной нити"
+        cost:
+          type: number
+          format: float
+          example: 3500.00
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - patient_id
+        - doctor_id
+        - service_id
+        - visit_date
+        - cost
+
+    DiagnosisSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 301
+        user_id:
+          type: integer
+          example: 1
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        result_diagnosis:
+          type: string
+          example: "Предположительно: острый пульпит"
+        result_recommendation:
+          type: string
+          example: "Срочная запись к стоматологу-хирургу"
+      required:
+        - id
+        - user_id
+        - started_at
+
+    DiagnosisAnswer:
+      type: object
+      properties:
+        id:
+          type: integer
+        session_id:
+          type: integer
+        question_key:
+          type: string
+          example: "pain"
+        answer_value:
+          type: string
+          example: "severe_pain"
+
+    # ---------- Модели запросов ----------
+    LoginRequest:
+      type: object
+      required:
+        - credential
+        - password
+      properties:
+        credential:
+          type: string
+          description: Email или телефон пользователя
+          example: "ivan@example.com"
+        password:
+          type: string
+          format: password
+          example: "secret123"
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "bearer"
+        user:
+          $ref: '#/components/schemas/User'
+
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - phone
+        - password
+      properties:
+        name:
+          type: string
+          example: "Иван Иванов"
+        email:
+          type: string
+          format: email
+          example: "ivan@example.com"
+        phone:
+          type: string
+          example: "+71234567890"
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: "secret123"
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Иван Петров"
+        phone:
+          type: string
+          example: "+70987654321"
+        email:
+          type: string
+          format: email
+          example: "new@example.com"
+
+    AppointmentCreate:
+      type: object
+      required:
+        - doctor_id
+        - service_id
+        - date
+        - time
+      properties:
+        doctor_id:
+          type: integer
+          example: 2
+        service_id:
+          type: integer
+          example: 1
+        date:
+          type: string
+          format: date
+          example: "2023-08-15"
+        time:
+          type: string
+          format: time
+          example: "10:00"
+        notes:
+          type: string
+          example: "Просьба не задерживаться"
+
+    AppointmentUpdate:
+      type: object
+      properties:
+        doctor_id:
+          type: integer
+        service_id:
+          type: integer
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          format: time
+        status:
+          type: string
+          enum: [scheduled, cancelled]
+        notes:
+          type: string
+
+    ScheduleSlotCreate:
+      type: object
+      required:
+        - date
+        - time
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2023-08-15"
+        time:
+          type: string
+          format: time
+          example: "10:00"
+
+    DiagnosisAnswerSubmit:
+      type: object
+      required:
+        - question_key
+        - answer_value
+      properties:
+        question_key:
+          type: string
+          example: "pain"
+        answer_value:
+          type: string
+          example: "severe_pain"
+
+    # ---------- Ответы с ошибками ----------
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Описание ошибки"
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ========== AUTH ==========
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Вход в систему
+      description: Аутентификация пользователя по email/телефону и паролю. Возвращает JWT токен.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Неверные учётные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Регистрация нового пользователя
+      description: Создаёт учётную запись пациента. Роль по умолчанию — patient.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Пользователь успешно создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Ошибка валидации (например, email уже занят)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/profile:
+    get:
+      tags:
+        - Auth
+      summary: Получить профиль текущего пользователя
+      description: Возвращает информацию об авторизованном пользователе.
+      operationId: getProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Не авторизован
+    put:
+      tags:
+        - Auth
+      summary: Обновить профиль текущего пользователя
+      description: Изменяет имя, телефон или email. Email должен быть уникальным.
+      operationId: updateProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Профиль обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Ошибка валидации
+        '401':
+          description: Не авторизован
+
+  # ========== USERS (admin only) ==========
+  /users:
+    get:
+      tags:
+        - Users
+      summary: Список пользователей (только для администраторов)
+      description: Возвращает всех пользователей с возможностью фильтрации по роли.
+      operationId: getUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [patient, doctor, admin]
+          description: Фильтр по роли
+      responses:
+        '200':
+          description: Список пользователей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Доступ запрещён (не администратор)
+
+  /users/{id}:
+    get:
+      tags:
+        - Users
+      summary: Получить пользователя по ID
+      description: Возвращает детальную информацию о пользователе. Доступно администратору или самому пользователю.
+      operationId: getUserById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о пользователе
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '403':
+          description: Нет прав
+        '404':
+          description: Пользователь не найден
+
+  # ========== DOCTORS ==========
+  /doctors:
+    get:
+      tags:
+        - Doctors
+      summary: Список врачей
+      description: Возвращает список всех врачей с возможностью фильтрации по специальности.
+      operationId: getDoctors
+      parameters:
+        - name: specialty
+          in: query
+          schema:
+            type: string
+          description: Фильтр по специальности (например, "терапевт")
+      responses:
+        '200':
+          description: Список врачей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Doctor'
+
+  /doctors/{id}:
+    get:
+      tags:
+        - Doctors
+      summary: Получить врача по ID
+      description: Возвращает детальную информацию о конкретном враче.
+      operationId: getDoctorById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о враче
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Doctor'
+        '404':
+          description: Врач не найден
+
+  /doctors/{id}/schedule:
+    get:
+      tags:
+        - Doctors
+        - Schedule
+      summary: Расписание врача на период
+      description: Возвращает слоты расписания для указанного врача в заданном диапазоне дат.
+      operationId: getDoctorSchedule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: date_from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Начальная дата (включительно)
+        - name: date_to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Конечная дата (включительно)
+      responses:
+        '200':
+          description: Список слотов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleSlot'
+
+  # ========== SERVICES ==========
+  /services:
+    get:
+      tags:
+        - Services
+      summary: Список услуг
+      description: Возвращает все доступные услуги клиники.
+      operationId: getServices
+      responses:
+        '200':
+          description: Список услуг
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Service'
+
+  /services/{id}:
+    get:
+      tags:
+        - Services
+      summary: Получить услугу по ID
+      operationId: getServiceById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация об услуге
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '404':
+          description: Услуга не найдена
+
+  # ========== APPOINTMENTS ==========
+  /appointments:
+    get:
+      tags:
+        - Appointments
+      summary: Список записей текущего пользователя
+      description: Для пациента возвращает его записи, для врача — все записи к нему, для администратора — все записи.
+      operationId: getAppointments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [scheduled, completed, cancelled]
+          description: Фильтр по статусу
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Начало периода
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Конец периода
+      responses:
+        '200':
+          description: Список записей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        '401':
+          description: Не авторизован
+
+    post:
+      tags:
+        - Appointments
+      summary: Создать запись на приём
+      description: Создаёт новую запись. Проверяет доступность слота.
+      operationId: createAppointment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreate'
+      responses:
+        '201':
+          description: Запись создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Неверные данные
+        '401':
+          description: Не авторизован
+        '409':
+          description: Слот уже занят
+
+  /appointments/{id}:
+    get:
+      tags:
+        - Appointments
+      summary: Получить запись по ID
+      operationId: getAppointmentById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о записи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '403':
+          description: Нет прав для просмотра этой записи
+        '404':
+          description: Запись не найдена
+
+    put:
+      tags:
+        - Appointments
+      summary: Обновить запись (перенести или изменить)
+      description: Позволяет изменить дату, время, врача, услугу или отменить запись.
+      operationId: updateAppointment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentUpdate'
+      responses:
+        '200':
+          description: Запись обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          description: Ошибка валидации
+        '403':
+          description: Нет прав
+        '404':
+          description: Запись не найдена
+        '409':
+          description: Новый слот уже занят
+
+    delete:
+      tags:
+        - Appointments
+      summary: Отменить запись
+      description: Меняет статус на cancelled (не удаляет физически).
+      operationId: cancelAppointment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Запись отменена (без тела ответа)
+        '403':
+          description: Нет прав
+        '404':
+          description: Запись не найдена
+
+  # ========== SCHEDULE (doctor's own schedule) ==========
+  /schedule:
+    get:
+      tags:
+        - Schedule
+      summary: Получить расписание текущего врача
+      description: Возвращает слоты расписания для авторизованного врача в заданном диапазоне дат.
+      operationId: getMySchedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: date_from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Список слотов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleSlot'
+        '401':
+          description: Не авторизован
+        '403':
+          description: Пользователь не является врачом
+
+    post:
+      tags:
+        - Schedule
+      summary: Добавить слот в своё расписание
+      description: Создаёт новый доступный слот для текущего врача.
+      operationId: createScheduleSlot
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleSlotCreate'
+      responses:
+        '201':
+          description: Слот создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleSlot'
+        '400':
+          description: Неверные данные
+        '401':
+          description: Не авторизован
+        '403':
+          description: Пользователь не является врачом
+        '409':
+          description: Слот с такой датой и временем уже существует
+
+  /schedule/{id}:
+    put:
+      tags:
+        - Schedule
+      summary: Изменить слот (например, пометить недоступным)
+      operationId: updateScheduleSlot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_available:
+                  type: boolean
+              example:
+                is_available: false
+      responses:
+        '200':
+          description: Слот обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleSlot'
+        '403':
+          description: Нет прав (слот принадлежит другому врачу)
+        '404':
+          description: Слот не найден
+
+    delete:
+      tags:
+        - Schedule
+      summary: Удалить слот из расписания
+      operationId: deleteScheduleSlot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Слот удалён
+        '403':
+          description: Нет прав
+        '404':
+          description: Слот не найден
+
+  # ========== VISITS ==========
+  /visits:
+    get:
+      tags:
+        - Visits
+      summary: История посещений текущего пользователя
+      description: Для пациента возвращает его визиты, для врача — все завершённые приёмы, для администратора — все.
+      operationId: getVisits
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Список визитов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Visit'
+        '401':
+          description: Не авторизован
+
+  /visits/{id}:
+    get:
+      tags:
+        - Visits
+      summary: Получить детали визита по ID
+      operationId: getVisitById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Информация о визите
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Visit'
+        '403':
+          description: Нет прав
+        '404':
+          description: Визит не найден
+
+  # ========== DIAGNOSIS ==========
+  /diagnosis/start:
+    post:
+      tags:
+        - Diagnosis
+      summary: Начать сессию диагностики
+      description: Создаёт новую сессию предварительной диагностики для текущего пользователя.
+      operationId: startDiagnosis
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Сессия создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisSession'
+        '401':
+          description: Не авторизован
+
+  /diagnosis/{sessionId}/answer:
+    post:
+      tags:
+        - Diagnosis
+      summary: Отправить ответ на вопрос диагностики
+      description: Сохраняет ответ пользователя в текущей сессии.
+      operationId: submitDiagnosisAnswer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosisAnswerSubmit'
+      responses:
+        '200':
+          description: Ответ сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisAnswer'
+        '403':
+          description: Нет прав (сессия принадлежит другому пользователю)
+        '404':
+          description: Сессия не найдена
+
+  /diagnosis/{sessionId}/result:
+    get:
+      tags:
+        - Diagnosis
+      summary: Получить результат диагностики
+      description: Возвращает предварительный диагноз и рекомендации после завершения опроса.
+      operationId: getDiagnosisResult
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Результат диагностики
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisSession'
+        '403':
+          description: Нет прав
+        '404':
+          description: Сессия не найдена
