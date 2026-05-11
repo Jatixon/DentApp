@@ -633,7 +633,38 @@ footer {
     color: var(--secondary);
 }
 
+/* ===== Уведомления в шапке ===== */
+.notification-bell {
+    position: relative;
+    font-size: 1.5rem;
+    color: var(--dark);
+    cursor: pointer;
+    margin-right: 20px;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+}
+.notification-bell:hover {
+    color: var(--primary);
+}
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -8px;
+    font-size: 0.8rem;
+    color: #e74c3c;        /* красный */
+    text-shadow: 0 0 4px rgba(231, 76, 60, 0.8);
+    display: none;          /* скрыта по умолчанию */
+    animation: blink 1.2s ease-in-out infinite;
+}
+.notification-badge.active {
+    display: inline;        /* показываем, когда есть уведомления */
+}
 
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
 /* Responsive */
 
 /* Стили публичного расписания */
@@ -720,5 +751,16 @@ footer {
     .step-number {
         margin-bottom: 0;
     }
-    
+    .btn-danger {
+    background-color: var(--danger);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 0.9rem;
+    }
+    .btn-danger:hover {
+        opacity: 0.9;
+    }
 }

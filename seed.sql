@@ -1,10 +1,9 @@
 -- Добавляем тестовых пользователей (пароль: 123456, хеш bcrypt)
 INSERT INTO users (name, email, phone, password_hash, role) VALUES
-('Иван Петров', 'ivan@example.com', '+71234567890', '$2b$10$r0Yi0h7Q2Rn3VJ5VKqO6wO9XmXkXkXkXkXkXkXkXkXkXkXkXkXk', 'patient'),
-('Анна Сидорова', 'anna@example.com', '+79876543210', '$2b$10$r0Yi0h7Q2Rn3VJ5VKqO6wO9XmXkXkXkXkXkXkXkXkXkXkXkXkXk', 'patient'),
-('Петров Алексей Владимирович', 'alex@dentapp.ru', '+79031234567', '$2b$10$r0Yi0h7Q2Rn3VJ5VKqO6wO9XmXkXkXkXkXkXkXkXkXkXkXkXkXk', 'doctor'),
-('Владимир Владимирович Владов', 'vladov@dentapp.ru', '+79051112233', '$2b$10$r0Yi0h7Q2Rn3VJ5VKqO6wO9XmXkXkXkXkXkXkXkXkXkXkXkXkXk', 'doctor'),
-('Ченджинджи Кубаки', 'kubaki@dentapp.ru', '+79052223344', '$2b$10$r0Yi0h7Q2Rn3VJ5VKqO6wO9XmXkXkXkXkXkXkXkXkXkXkXkXkXk', 'doctor');
+('Анна Сидорова', 'anna@example.com', '+79876543210', '$2b$10$KZ5FrLyMMgWaHmbHlsOzV.cLJPdg2EUrIwQpx8WQSGUw3iPK3PXqC', 'patient'),
+('Петров Алексей Владимирович', 'alex@dentapp.ru', '+79031234567', '$2b$10$KZ5FrLyMMgWaHmbHlsOzV.cLJPdg2EUrIwQpx8WQSGUw3iPK3PXqC', 'doctor'),
+('Владимир Владимирович Владов', 'vladov@dentapp.ru', '+79051112233', '$2b$10$KZ5FrLyMMgWaHmbHlsOzV.cLJPdg2EUrIwQpx8WQSGUw3iPK3PXqC', 'doctor'),
+('Ченджинджи Кубаки', 'kubaki@dentapp.ru', '+79052223344', '$2b$10$KZ5FrLyMMgWaHmbHlsOzV.cLJPdg2EUrIwQpx8WQSGUw3iPK3PXqC', 'doctor');
 
 -- Данные врачей (id подставятся по email)
 INSERT INTO doctors (id, specialty, experience_years, rating, bio)
@@ -33,4 +32,4 @@ FROM doctors d
 CROSS JOIN generate_series(0, 13) AS day(day)
 CROSS JOIN (VALUES ('09:00'), ('10:00'), ('11:00'), ('12:00'), ('14:00'), ('15:00'), ('16:00'), ('17:00')) AS t(time)
 WHERE EXTRACT(DOW FROM current_date + interval '1 day' * day.day) NOT IN (0, 6)
-ON CONFLICT (doctor_id, slot_date, slot_time) DO NOTHING;у
+ON CONFLICT (doctor_id, slot_date, slot_time) DO NOTHING;

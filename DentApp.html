@@ -29,6 +29,10 @@
                 <button class="btn btn-outline" id="loginBtn">Вход</button>
                 <button class="btn btn-primary" id="registerBtn">Регистрация</button>
             </div>
+            <div class="notification-bell" id="notificationBell" style="display: none;">
+                <i class="fas fa-bell"></i>
+                <span class="notification-badge" id="notificationBadge">●</span>
+            </div>
             <div class="user-info" id="userInfo" style="display: none;">
                 <div class="user-avatar" id="userAvatar">ИИ</div>
                 <div>
@@ -121,6 +125,15 @@
                         <button class="btn btn-primary" id="quickAppointmentBtn">Записаться на прием</button>
                         <button class="btn btn-outline" id="quickDiagnosisBtn">Пройти диагностику</button>
                         <button class="btn btn-outline" id="viewHistoryBtn">Посмотреть историю</button>
+                    </div>
+                </div>
+                <div class="dashboard-card">
+                    <div class="card-title">
+                        <i class="fas fa-bell"></i>
+                        <h3>Уведомления</h3>
+                    </div>
+                    <div id="notificationsList">
+                        <p>Нет новых уведомлений</p>
                     </div>
                 </div>
             </div>

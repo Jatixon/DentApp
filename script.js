@@ -76,26 +76,12 @@ const state = {
     diagnosisAnswers: [],
     currentMonth: new Date().getMonth(),
     currentYear: new Date().getFullYear(),
-    selectedDate: new Date()
+    selectedDate: new Date(),
+    scheduleDoctor: 'all',
+    scheduleDate: new Date()
 };
 
 // Mock Data (оставлено для совместимости с историей и диагностикой)
-const mockDoctors = [
-    { id: 1, name: 'Петров Алексей Владимирович', specialty: 'Терапевт, хирург', experience: '12 лет', rating: 4.8 },
-    { id: 2, name: 'Сидорова Ирина Петровна', specialty: 'Ортодонт', experience: '8 лет', rating: 4.9 },
-    { id: 3, name: 'Козлов Сергей Дмитриевич', specialty: 'Протезист', experience: '15 лет', rating: 4.7 },
-    { id: 4, name: 'Морозова Ольга Ивановна', specialty: 'Гигиенист', experience: '6 лет', rating: 4.6 }
-];
-
-const mockServices = [
-    { id: 'therapy', name: 'Терапия (лечение кариеса)' },
-    { id: 'hygiene', name: 'Гигиена и чистка' },
-    { id: 'surgery', name: 'Хирургия (удаление зубов)' },
-    { id: 'orthodontics', name: 'Ортодонтия (брекеты)' },
-    { id: 'prosthetics', name: 'Протезирование' },
-    { id: 'diagnostics', name: 'Диагностика и консультация' }
-];
-
 const mockDiagnosisQuestions = [
     {
         id: 1,
@@ -149,7 +135,6 @@ const mockHistory = [
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if user is logged in
     const savedUser = localStorage.getItem('dentapp_user');
     if (savedUser) {
         state.currentUser = JSON.parse(savedUser);
@@ -204,28 +189,42 @@ document.addEventListener('DOMContentLoaded', function() {
     // History
     document.getElementById('applyHistoryFilter').addEventListener('click', applyHistoryFilter);
 
-    // Schedule (for doctors)
-    // В DOMContentLoaded замените обработчики календаря для schedule
+    // Schedule
     document.getElementById('prevMonthBtn')?.addEventListener('click', prevMonth);
     document.getElementById('nextMonthBtn')?.addEventListener('click', nextMonth);
-    // Кнопку "Добавить слот" можно скрыть или оставить только для врачей
     const addSlotBtn = document.getElementById('addScheduleSlotBtn');
     if (addSlotBtn) addSlotBtn.style.display = 'none';
 
-    // Initialize appointment doctors
-    renderDoctors();
-    
-    // Initialize calendar
-    renderCalendar();
+    // Notification bell click
+    document.getElementById('notificationBell')?.addEventListener('click', () => {
+        navigateTo('dashboard');
+        setTimeout(() => {
+            const notifBlock = document.getElementById('notificationsList');
+            if (notifBlock) notifBlock.scrollIntoView({ behavior: 'smooth' });
+        }, 300);
+    });
 
-    // Initialize history
+    // Schedule doctor filter
+    document.getElementById('scheduleDoctorFilter')?.addEventListener('change', function() {
+        state.scheduleDoctor = this.value;
+        renderPublicSchedule();
+    });
+
+    // Periodic notification refresh
+    setInterval(() => {
+        if (state.currentUser) {
+            updateNotificationBell();
+        }
+    }, 30000);
+
+    // Initialize
+    renderDoctors();
+    renderCalendar();
     renderHistory();
 
-    // Initialize appointment date picker
     const appointmentDateInput = document.getElementById('appointmentDate');
     if (appointmentDateInput) {
         appointmentDateInput.addEventListener('change', renderTimeSlots);
-        // Set min date (сегодня) и default date (завтра) без сдвига
         const today = new Date();
         const y = today.getFullYear();
         const m = String(today.getMonth() + 1).padStart(2, '0');
@@ -253,10 +252,18 @@ function navigateTo(page) {
   });
   document.getElementById(page).classList.add('active');
   state.currentPage = page;
-  if (page === 'dashboard') updateDashboard();
-  else if (page === 'appointment') resetAppointment();
-  else if (page === 'history') renderHistory();
-  else if (page === 'schedule') initPublicSchedule();
+  if (page === 'dashboard') {
+    updateDashboard();
+    updateNotificationBell();
+    loadNotifications();
+  } else if (page === 'appointment') {
+    resetAppointment();
+    updateNotificationBell();
+  } else if (page === 'history') {
+    renderHistory();
+  } else if (page === 'schedule') {
+    initPublicSchedule();
+  }
 }
 
 // Auth functions
@@ -381,18 +388,20 @@ function updateAuthUI() {
     if (state.currentUser) {
         document.getElementById('authButtons').style.display = 'none';
         document.getElementById('userInfo').style.display = 'flex';
+        document.getElementById('notificationBell').style.display = 'flex';
         document.getElementById('userName').textContent = state.currentUser.name;
         document.getElementById('userAvatar').textContent = getInitials(state.currentUser.name);
         document.getElementById('dashboardUserName').textContent = state.currentUser.name;
         document.getElementById('dashboardUserEmail').textContent = state.currentUser.email;
         document.getElementById('dashboardUserPhone').textContent = state.currentUser.phone;
         document.getElementById('dashboardUserAvatar').textContent = getInitials(state.currentUser.name);
-        // Загружаем данные для записи, если пользователь авторизован
         loadDoctors();
         loadServices();
+        updateNotificationBell();
     } else {
         document.getElementById('authButtons').style.display = 'flex';
         document.getElementById('userInfo').style.display = 'none';
+        document.getElementById('notificationBell').style.display = 'none';
     }
 }
 
@@ -403,6 +412,56 @@ function getInitials(name) {
 // Dashboard functions
 async function updateDashboard() {
   if (!state.currentUser) return;
+  loadNotifications();
+
+  if (state.currentUser.role === 'doctor') {
+    // Для врача – показываем список его приёмов
+    try {
+      const appointments = await apiRequest('/appointments');
+      const upcomingContainer = document.getElementById('upcomingAppointments');
+      if (!upcomingContainer) return;
+
+      if (appointments.length === 0) {
+        upcomingContainer.innerHTML = '<p>У вас нет запланированных приёмов</p>';
+      } else {
+        upcomingContainer.innerHTML = '';
+        appointments.forEach(app => {
+          if (app.status !== 'scheduled') return; // показываем только активные
+          const div = document.createElement('div');
+          div.style.cssText = 'padding:10px; border-bottom:1px solid var(--light-gray);';
+          div.innerHTML = `
+            <div><strong>${app.service_name}</strong></div>
+            <div>Пациент: ${app.patient_name}</div>
+            <div>${app.appointment_date} в ${app.appointment_time}</div>
+            <button class="btn btn-danger btn-sm cancel-appointment-btn" data-appointment-id="${app.id}" style="margin-top:5px;">Отменить запись</button>
+          `;
+          upcomingContainer.appendChild(div);
+        });
+
+        // Навешиваем обработчики на кнопки отмены
+        document.querySelectorAll('.cancel-appointment-btn').forEach(btn => {
+          btn.addEventListener('click', async function() {
+            const appointmentId = this.getAttribute('data-appointment-id');
+            if (confirm('Вы уверены, что хотите отменить эту запись?')) {
+              try {
+                await apiRequest(`/appointments/${appointmentId}/cancel`, { method: 'PATCH' });
+                alert('Запись отменена. Пациент получит уведомление.');
+                updateDashboard(); // обновляем список
+                updateNotificationBell(); // если вдруг врач тоже видит колокольчик
+              } catch (err) {
+                alert('Ошибка: ' + err.message);
+              }
+            }
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки записей врача:', err);
+    }
+    return; // врач больше ничего не видит из стандартного дашборда
+  }
+
+  // Обычное поведение для пациента (уже существующий код)
   try {
     const appointments = await apiRequest('/appointments');
     const upcomingContainer = document.getElementById('upcomingAppointments');
@@ -414,11 +473,9 @@ async function updateDashboard() {
       upcomingContainer.innerHTML = '';
       appointments.forEach(app => {
         const div = document.createElement('div');
-        // Форматируем дату из ISO (например, "2026-05-04T17:00:00.000Z") в DD.MM.YYYY
         let displayDate = app.appointment_date;
         if (displayDate) {
           const dateObj = new Date(displayDate);
-          // Проверяем, что дата валидная
           if (!isNaN(dateObj.getTime())) {
             const day = String(dateObj.getDate()).padStart(2, '0');
             const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -436,7 +493,6 @@ async function updateDashboard() {
       });
     }
 
-    // Обновление статистики посещений (пока заглушка, можно заменить на реальные данные)
     const historyStats = document.getElementById('visitStats');
     if (historyStats) {
       historyStats.innerHTML = `<p>Всего посещений: <strong>0</strong></p><p>Последний визит: <strong>нет данных</strong></p>`;
@@ -621,6 +677,7 @@ async function confirmAppointment() {
     document.querySelectorAll('.appointment-steps .step').forEach(step => step.classList.remove('active', 'completed'));
     document.querySelector('.appointment-steps .step[data-step="4"]').classList.add('completed');
     updateDashboard();
+    updateNotificationBell();
   } catch (err) {
     alert('Ошибка записи: ' + err.message);
   }
@@ -729,7 +786,6 @@ function showDiagnosisResult() {
             <button class="btn btn-outline" id="restartDiagnosis">Пройти диагностику еще раз</button>
         </div>
     `;
-    // Обработчики кнопок
     document.getElementById('bookAppointmentFromDiagnosis').addEventListener('click', () => {
         navigateTo('appointment');
     });
@@ -781,14 +837,7 @@ function viewVisitDetails(id) {
     alert(`Просмотр деталей посещения #${id}. В реальном приложении здесь будет открытие модального окна с полной информацией.`);
 }
 
-// Schedule functions (for doctors)
-// ===================== ПУБЛИЧНОЕ РАСПИСАНИЕ (ВСЕ ВРАЧИ) =====================
-
-// Состояние расписания (добавим выбор врача)
-state.scheduleDoctor = 'all'; // 'all' или id врача
-state.scheduleDate = new Date(); // выбранная дата
-
-// Обновлённый renderCalendar – теперь без проверок роли
+// Schedule functions (public)
 function renderCalendar() {
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
     const currentMonthEl = document.getElementById('currentMonth');
@@ -824,7 +873,7 @@ function renderCalendar() {
         const dayElement = document.createElement('div');
         dayElement.className = 'calendar-day';
         if (day === today.getDate() && state.currentMonth === today.getMonth() && state.currentYear === today.getFullYear()) {
-            dayElement.classList.add('today'); // опциональный класс
+            dayElement.classList.add('today');
         }
         dayElement.textContent = day;
         dayElement.addEventListener('click', () => {
@@ -838,7 +887,6 @@ function renderCalendar() {
         daysContainer.appendChild(dayElement);
     }
 
-    // Если ни одна дата не выбрана, выбираем сегодняшнюю
     if (!document.querySelector('.calendar-day.active')) {
         const todayEl = Array.from(daysContainer.querySelectorAll('.calendar-day')).find(el => {
             return parseInt(el.textContent) === today.getDate() &&
@@ -849,7 +897,6 @@ function renderCalendar() {
     }
 }
 
-// Загрузка и отображение публичного расписания
 async function renderPublicSchedule() {
     const container = document.getElementById('scheduleTimeSlots');
     if (!container) return;
@@ -857,7 +904,7 @@ async function renderPublicSchedule() {
 
     const selectedDate = state.selectedDate;
     const formattedDate = selectedDate.toISOString().split('T')[0];
-    const doctorId = state.scheduleDoctor; // 'all' или конкретный id
+    const doctorId = state.scheduleDoctor;
 
     try {
         let url = `/api/public/schedule?date=${formattedDate}`;
@@ -874,7 +921,6 @@ async function renderPublicSchedule() {
         }
 
         container.innerHTML = '';
-        // Группируем слоты по врачам
         const groupedByDoctor = {};
         slots.forEach(slot => {
             const key = slot.doctor_name;
@@ -889,7 +935,6 @@ async function renderPublicSchedule() {
             groupedByDoctor[key].slots.push(slot);
         });
 
-        // Отрисовываем карточки врачей
         Object.values(groupedByDoctor).forEach(doctor => {
             const doctorCard = document.createElement('div');
             doctorCard.className = 'doctor-schedule-card';
@@ -909,7 +954,7 @@ async function renderPublicSchedule() {
                                 }
                             </div>
                         </div>
-                            `).join('')}
+                    `).join('')}
                 </div>
             `;
             container.appendChild(doctorCard);
@@ -921,15 +966,10 @@ async function renderPublicSchedule() {
     }
 }
 
-// Инициализация публичной страницы расписания (вызывается при переходе)
-// Инициализация публичной страницы расписания (вызывается при переходе)
 function initPublicSchedule() {
-    // Загружаем список врачей для фильтра
     const doctorFilter = document.getElementById('scheduleDoctorFilter');
     if (doctorFilter) {
-        // Показываем заглушку на время загрузки
         doctorFilter.innerHTML = '<option value="all">Все врачи</option>';
-        // Загружаем врачей с публичного API
         fetch('/api/public/doctors')
             .then(r => r.json())
             .then(doctors => {
@@ -937,9 +977,7 @@ function initPublicSchedule() {
                 doctors.forEach(doc => {
                     doctorFilter.innerHTML += `<option value="${doc.id}">${doc.name}</option>`;
                 });
-                // Восстанавливаем ранее выбранного врача (если был)
                 doctorFilter.value = state.scheduleDoctor;
-                // Сразу загружаем расписание после получения списка
                 renderPublicSchedule();
             })
             .catch(err => {
@@ -948,72 +986,9 @@ function initPublicSchedule() {
                 renderPublicSchedule();
             });
     } else {
-        // Если фильтра нет, просто обновляем расписание
         renderPublicSchedule();
     }
-
-    // Обновляем календарь
     renderCalendar();
-}
-
-// Добавляем обработчик фильтра по врачу в setup
-// (вызови этот код в DOMContentLoaded, например)
-document.getElementById('scheduleDoctorFilter')?.addEventListener('change', function() {
-    state.scheduleDoctor = this.value;
-    renderPublicSchedule();
-});
-
-// При загрузке страницы schedule
-// В navigateTo добавить вызов initPublicSchedule() когда page === 'schedule'
-
-async function renderScheduleForDay() {
-  const container = document.getElementById('scheduleTimeSlots');
-  if (!container) return;
-  container.innerHTML = '<p>Загрузка...</p>';
-
-  if (!state.currentUser || state.currentUser.role !== 'doctor') {
-    container.innerHTML = '<p>Эта страница доступна только врачам</p>';
-    return;
-  }
-
-  const selectedDate = state.selectedDate;
-  const formattedDate = selectedDate.toISOString().split('T')[0];
-
-  try {
-    const slots = await apiRequest(`/doctor/schedule?date=${formattedDate}`);
-    if (!slots || slots.length === 0) {
-      container.innerHTML = '<p>На эту дату нет слотов расписания</p>';
-      return;
-    }
-
-    container.innerHTML = '';
-    slots.forEach(slot => {
-      const slotEl = document.createElement('div');
-      slotEl.className = `time-slot ${slot.status}`;
-      if (slot.status === 'booked') {
-        slotEl.innerHTML = `
-          <div><strong>${slot.time}</strong></div>
-          <div>👤 ${slot.patient}</div>
-          <div>💊 ${slot.service}</div>
-          <div style="color: var(--danger); font-size: 0.8rem;">Занято</div>
-        `;
-      } else if (slot.status === 'available') {
-        slotEl.innerHTML = `
-          <div><strong>${slot.time}</strong></div>
-          <div style="color: var(--success);">Свободно</div>
-        `;
-      } else {
-        slotEl.innerHTML = `
-          <div><strong>${slot.time}</strong></div>
-          <div style="color: var(--gray);">Недоступно</div>
-        `;
-      }
-      container.appendChild(slotEl);
-    });
-  } catch (err) {
-    console.error(err);
-    container.innerHTML = '<p>Ошибка загрузки расписания</p>';
-  }
 }
 
 function prevMonth() {
@@ -1049,6 +1024,118 @@ function formatDate(dateString) {
         month: '2-digit',
         year: 'numeric'
     });
+}
+
+// ========== Индикатор уведомлений (шапка) ==========
+async function updateNotificationBell() {
+  const bell = document.getElementById('notificationBell');
+  const badge = document.getElementById('notificationBadge');
+  if (!bell || !badge || !state.currentUser) return;
+
+  bell.style.display = 'flex';
+
+  try {
+    const appointments = await apiRequest('/appointments');
+    console.log('Все записи для индикатора:', appointments);
+
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const upcoming = appointments.filter(app => {
+      if (!app.appointment_date || !app.appointment_time) return false;
+      const appDate = new Date(app.appointment_date + 'T' + app.appointment_time);
+      if (isNaN(appDate.getTime())) return false;
+      return appDate >= now && appDate <= in24h && app.status === 'scheduled';
+    });
+
+    console.log('Предстоящих за 24ч:', upcoming.length);
+
+    const notifData = await apiRequest('/notifications');
+    const unread = notifData.filter(n => !n.is_read).length;
+    console.log('Непрочитанных уведомлений:', unread);
+
+    if (upcoming.length > 0 || unread > 0) {
+      badge.classList.add('active');
+    } else {
+      badge.classList.remove('active');
+    }
+  } catch (err) {
+    console.error('Ошибка в updateNotificationBell', err);
+  }
+}
+
+async function loadNotifications() {
+  const container = document.getElementById('notificationsList');
+  if (!container || !state.currentUser) return;
+  try {
+    const [notifData, appointments] = await Promise.all([
+      apiRequest('/notifications'),
+      apiRequest('/appointments')
+    ]);
+
+    console.log('Загружены уведомления из БД:', notifData);
+    console.log('Все записи пациента:', appointments);
+
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const upcomingAppointments = appointments
+      .filter(app => {
+        if (!app.appointment_date || !app.appointment_time) return false;
+        const appDate = new Date(app.appointment_date + 'T' + app.appointment_time);
+        if (isNaN(appDate.getTime())) return false;
+        return appDate >= now && appDate <= in24h && app.status === 'scheduled';
+      })
+      .map(app => ({
+        id: 'appt_' + app.id,
+        appointment_id: app.id,
+        message: `Скоро приём: ${app.appointment_date} в ${app.appointment_time} — ${app.doctor_name}, ${app.service_name}`,
+        created_at: new Date().toISOString(),
+        is_read: false,
+        is_virtual: true
+      }));
+
+    const unread = notifData.filter(n => !n.is_read);
+
+    const allNotifications = [...unread];
+    upcomingAppointments.forEach(up => {
+      if (!allNotifications.some(n => n.appointment_id == up.appointment_id)) {
+        allNotifications.push(up);
+      }
+    });
+
+    allNotifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (allNotifications.length === 0) {
+      container.innerHTML = '<p>Нет новых уведомлений</p>';
+      return;
+    }
+
+    container.innerHTML = '';
+    allNotifications.forEach(notif => {
+      const div = document.createElement('div');
+      div.className = 'notification-item';
+      div.style.cssText = 'padding:10px 0; border-bottom:1px solid var(--light-gray);';
+      div.innerHTML = `
+        <div style="font-size:0.9rem; color:var(--gray);">${new Date(notif.created_at).toLocaleString('ru-RU')}</div>
+        <div style="margin-top:5px;">${notif.message}</div>
+        ${!notif.is_virtual ? `<button class="btn btn-outline btn-sm" data-id="${notif.id}" onclick="markNotifRead(${notif.id})" style="margin-top:5px;">✓ Прочитано</button>` : ''}
+      `;
+      container.appendChild(div);
+    });
+  } catch (err) {
+    console.error('Ошибка загрузки уведомлений', err);
+  }
+}
+
+async function markNotifRead(id) {
+  if (typeof id === 'string' && id.startsWith('appt_')) return;
+  try {
+    await apiRequest(`/notifications/${id}/read`, { method: 'PATCH' });
+    loadNotifications();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // =====================================================
