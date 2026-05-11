@@ -1,35 +1,480 @@
-const http = require('http');
-const fs = require('fs');
+const express = require('express');
 const path = require('path');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-const server = http.createServer((req, res) => {
-    let filePath = '.' + req.url;
-    if (filePath === './') filePath = './index.html';
+dotenv.config();
 
-    const ext = path.extname(filePath);
-    const mime = {
-        '.html': 'text/html',
-        '.css': 'text/css',
-        '.js': 'application/javascript',
-        '.json': 'application/json',
-        '.yaml': 'text/yaml',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-    };
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-    const contentType = mime[ext] || 'application/octet-stream';
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('.')); // раздаём статику (HTML, CSS, JS)
 
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
-            res.writeHead(404);
-            res.end('File not found');
-        } else {
-            res.writeHead(200, { 'Content-Type': contentType });
-            res.end(data);
-        }
+// Подключение к PostgreSQL
+const pool = new Pool({
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+});
+
+// Проверка подключения
+pool.connect((err) => {
+  if (err) console.error('Ошибка подключения к БД', err);
+  else console.log('Подключено к PostgreSQL');
+});
+
+// ========== Вспомогательные функции ==========
+const hashPassword = async (password) => {
+  return await bcrypt.hash(password, 10);
+};
+
+const comparePassword = async (password, hash) => {
+  return await bcrypt.compare(password, hash);
+};
+
+const generateToken = (userId, email, role) => {
+  return jwt.sign({ id: userId, email, role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+};
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ detail: 'Требуется авторизация' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ detail: 'Неверный или просроченный токен' });
+    req.user = user;
+    next();
+  });
+};
+
+// ========== API ЭНДПОИНТЫ ==========
+
+// Регистрация
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body;
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({ detail: 'Все поля обязательны' });
+    }
+    // Проверка уникальности email и phone
+    const existing = await pool.query(
+      'SELECT id FROM users WHERE email = $1 OR phone = $2',
+      [email, phone]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ detail: 'Email или телефон уже зарегистрированы' });
+    }
+    const hashed = await hashPassword(password);
+    const result = await pool.query(
+      `INSERT INTO users (name, email, phone, password_hash, role)
+       VALUES ($1, $2, $3, $4, 'patient')
+       RETURNING id, name, email, phone, role, created_at`,
+      [name, email, phone, hashed]
+    );
+    const user = result.rows[0];
+    res.status(201).json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Вход
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { credential, password } = req.body;
+    if (!credential || !password) {
+      return res.status(400).json({ detail: 'Укажите email/телефон и пароль' });
+    }
+    const userResult = await pool.query(
+      'SELECT * FROM users WHERE email = $1 OR phone = $1',
+      [credential]
+    );
+    const user = userResult.rows[0];
+    if (!user) {
+      return res.status(401).json({ detail: 'Неверные учётные данные' });
+    }
+    const valid = await comparePassword(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ detail: 'Неверные учётные данные' });
+    }
+    const token = generateToken(user.id, user.email, user.role);
+    res.json({
+      access_token: token,
+      token_type: 'bearer',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        created_at: user.created_at,
+      },
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
 });
 
-server.listen(3000, () => {
-    console.log('Сервер запущен: http://localhost:3000/');
+// Профиль (GET)
+app.get('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, email, phone, role, created_at FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ detail: 'Пользователь не найден' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
 });
+
+// Обновление профиля (PUT)
+app.put('/api/auth/profile', authenticateToken, async (req, res) => {
+  try {
+    const { name, phone, email } = req.body;
+    const updates = [];
+    const values = [];
+    if (name) { updates.push(`name = $${updates.length + 1}`); values.push(name); }
+    if (phone) { updates.push(`phone = $${updates.length + 1}`); values.push(phone); }
+    if (email) { updates.push(`email = $${updates.length + 1}`); values.push(email); }
+    if (updates.length === 0) return res.status(400).json({ detail: 'Нет данных для обновления' });
+    values.push(req.user.id);
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length} RETURNING id, name, email, phone, role, created_at`;
+    const result = await pool.query(query, values);
+    if (result.rows.length === 0) return res.status(404).json({ detail: 'Пользователь не найден' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ detail: 'Email или телефон уже заняты' });
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Дополнительные эндпоинты для демонстрации (можно расширить позже)
+app.get('/api/doctors', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT u.id, u.name, d.specialty, d.experience_years, d.rating, d.bio
+      FROM users u JOIN doctors d ON u.id = d.id
+      WHERE u.role = 'doctor'
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+app.get('/api/services', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM services');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Получение списка врачей (уже есть, но проверим, что возвращает нужные поля)
+// Убедитесь, что /api/doctors возвращает id, name, specialty и т.д.
+
+// Получение списка услуг (уже есть)
+
+// Создание записи на приём
+app.post('/api/appointments', authenticateToken, async (req, res) => {
+  try {
+    const { doctor_id, service_id, date, time, notes } = req.body;
+    const patient_id = req.user.id;
+
+    // Проверка существования врача и услуги
+    const doctorCheck = await pool.query('SELECT id FROM users WHERE id = $1 AND role = $2', [doctor_id, 'doctor']);
+    if (doctorCheck.rows.length === 0) {
+      return res.status(400).json({ detail: 'Врач не найден' });
+    }
+    const serviceCheck = await pool.query('SELECT id FROM services WHERE id = $1', [service_id]);
+    if (serviceCheck.rows.length === 0) {
+      return res.status(400).json({ detail: 'Услуга не найдена' });
+    }
+
+    // Проверка, что слот свободен (в таблице schedule)
+    const slotCheck = await pool.query(
+      'SELECT id FROM schedule WHERE doctor_id = $1 AND slot_date = $2 AND slot_time = $3 AND is_available = true',
+      [doctor_id, date, time]
+    );
+    if (slotCheck.rows.length === 0) {
+      return res.status(409).json({ detail: 'Выбранное время уже занято или недоступно' });
+    }
+
+    // Создаём запись
+    const result = await pool.query(
+      `INSERT INTO appointments (patient_id, doctor_id, service_id, appointment_date, appointment_time, notes)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, patient_id, doctor_id, service_id, appointment_date, appointment_time, status, notes, created_at`,
+      [patient_id, doctor_id, service_id, date, time, notes || null]
+    );
+    // Помечаем слот как занятый
+    await pool.query(
+      'UPDATE schedule SET is_available = false WHERE doctor_id = $1 AND slot_date = $2 AND slot_time = $3',
+      [doctor_id, date, time]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Получение записей текущего пользователя
+app.get('/api/appointments', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT a.id, a.appointment_date, a.appointment_time, a.status, a.notes,
+              d.id as doctor_id, d.name as doctor_name,
+              s.id as service_id, s.name as service_name
+       FROM appointments a
+       JOIN users d ON a.doctor_id = d.id
+       JOIN services s ON a.service_id = s.id
+       WHERE a.patient_id = $1
+       ORDER BY a.appointment_date ASC, a.appointment_time ASC`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Для врачей: получение расписания (свободные слоты) на выбранную дату
+app.get('/api/doctors/:id/slots', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ detail: 'Не указана дата' });
+    const result = await pool.query(
+      `SELECT slot_time FROM schedule
+       WHERE doctor_id = $1 AND slot_date = $2 AND is_available = true
+       ORDER BY slot_time`,
+      [req.params.id, date]
+    );
+    res.json(result.rows.map(row => row.slot_time));
+  } catch (err) {
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+// Получение расписания и записей для врача на выбранную дату
+// Получение расписания для врача на выбранную дату
+app.get('/api/public/schedule', async (req, res) => {
+  try {
+    const { doctorId, date } = req.query;
+    if (!date) {
+      return res.status(400).json({ detail: 'Не указана дата' });
+    }
+
+    let slotsQuery;
+    let slotsParams;
+    if (doctorId) {
+      // Слоты одного врача
+      slotsQuery = `
+        SELECT s.slot_time, s.is_available, s.doctor_id,
+               u.name AS doctor_name, d.specialty
+        FROM schedule s
+        JOIN users u ON s.doctor_id = u.id
+        JOIN doctors d ON u.id = d.id
+        WHERE s.doctor_id = $1 AND s.slot_date = $2
+        ORDER BY s.slot_time
+      `;
+      slotsParams = [doctorId, date];
+    } else {
+      // Слоты всех врачей
+      slotsQuery = `
+        SELECT s.slot_time, s.is_available, s.doctor_id,
+               u.name AS doctor_name, d.specialty
+        FROM schedule s
+        JOIN users u ON s.doctor_id = u.id
+        JOIN doctors d ON u.id = d.id
+        WHERE s.slot_date = $1
+        ORDER BY u.name, s.slot_time
+      `;
+      slotsParams = [date];
+    }
+
+    const slotsResult = await pool.query(slotsQuery, slotsParams);
+
+    // Записи пациентов (только scheduled) для этих слотов
+    const appointmentsQuery = `
+      SELECT a.appointment_time, a.doctor_id,
+             p.name AS patient_name,
+             srv.name AS service_name
+      FROM appointments a
+      JOIN users p ON a.patient_id = p.id
+      JOIN services srv ON a.service_id = srv.id
+      WHERE a.appointment_date = $1 AND a.status = 'scheduled'
+      ORDER BY a.appointment_time
+    `;
+    const appointmentsResult = await pool.query(appointmentsQuery, [date]);
+
+    // Карта занятых слотов: ключ "doctor_id:time" → { patient, service }
+    const bookedMap = new Map();
+    appointmentsResult.rows.forEach(app => {
+      bookedMap.set(`${app.doctor_id}:${app.appointment_time}`, {
+        patient: app.patient_name,
+        service: app.service_name,
+      });
+    });
+
+    // Формируем ответ
+    const schedule = slotsResult.rows.map(slot => {
+      const booking = bookedMap.get(`${slot.doctor_id}:${slot.slot_time}`);
+      if (booking) {
+        return {
+          time: slot.slot_time,
+          status: 'booked',
+          doctor_id: slot.doctor_id,
+          doctor_name: slot.doctor_name,
+          specialty: slot.specialty,
+          patient: booking.patient,
+          service: booking.service,
+        };
+      } else {
+        return {
+          time: slot.slot_time,
+          status: slot.is_available ? 'available' : 'unavailable',
+          doctor_id: slot.doctor_id,
+          doctor_name: slot.doctor_name,
+          specialty: slot.specialty,
+          patient: null,
+          service: null,
+        };
+      }
+    });
+
+    res.json(schedule);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Публичный список врачей (без авторизации)
+app.get('/api/public/doctors', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT u.id, u.name, d.specialty, d.experience_years, d.rating
+       FROM users u JOIN doctors d ON u.id = d.id
+       WHERE u.role = 'doctor'
+       ORDER BY u.name`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Публичное расписание врача (без авторизации)
+app.get('/api/public/schedule', async (req, res) => {
+  try {
+    const { doctorId, date } = req.query;
+    if (!date) {
+      return res.status(400).json({ detail: 'Не указана дата' });
+    }
+
+    let slotsQuery;
+    let slotsParams;
+    if (doctorId) {
+      // Слоты одного врача
+      slotsQuery = `
+        SELECT s.slot_time, s.is_available, s.doctor_id,
+               u.name AS doctor_name, d.specialty
+        FROM schedule s
+        JOIN users u ON s.doctor_id = u.id
+        JOIN doctors d ON u.id = d.id
+        WHERE s.doctor_id = $1 AND s.slot_date = $2
+        ORDER BY s.slot_time
+      `;
+      slotsParams = [doctorId, date];
+    } else {
+      // Слоты всех врачей
+      slotsQuery = `
+        SELECT s.slot_time, s.is_available, s.doctor_id,
+               u.name AS doctor_name, d.specialty
+        FROM schedule s
+        JOIN users u ON s.doctor_id = u.id
+        JOIN doctors d ON u.id = d.id
+        WHERE s.slot_date = $1
+        ORDER BY u.name, s.slot_time
+      `;
+      slotsParams = [date];
+    }
+
+    const slotsResult = await pool.query(slotsQuery, slotsParams);
+
+    // Записи пациентов (только scheduled) для этих слотов
+    const appointmentsQuery = `
+      SELECT a.appointment_time, a.doctor_id,
+             p.name AS patient_name,
+             srv.name AS service_name
+      FROM appointments a
+      JOIN users p ON a.patient_id = p.id
+      JOIN services srv ON a.service_id = srv.id
+      WHERE a.appointment_date = $1 AND a.status = 'scheduled'
+      ORDER BY a.appointment_time
+    `;
+    const appointmentsResult = await pool.query(appointmentsQuery, [date]);
+
+    // Карта занятых слотов: ключ "doctor_id:time" → { patient, service }
+    const bookedMap = new Map();
+    appointmentsResult.rows.forEach(app => {
+      bookedMap.set(`${app.doctor_id}:${app.appointment_time}`, {
+        patient: app.patient_name,
+        service: app.service_name,
+      });
+    });
+
+    // Формируем ответ
+    const schedule = slotsResult.rows.map(slot => {
+      const booking = bookedMap.get(`${slot.doctor_id}:${slot.slot_time}`);
+      if (booking) {
+        return {
+          time: slot.slot_time,
+          status: 'booked',
+          doctor_id: slot.doctor_id,
+          doctor_name: slot.doctor_name,
+          specialty: slot.specialty,
+          patient: booking.patient,
+          service: booking.service,
+        };
+      } else {
+        return {
+          time: slot.slot_time,
+          status: slot.is_available ? 'available' : 'unavailable',
+          doctor_id: slot.doctor_id,
+          doctor_name: slot.doctor_name,
+          specialty: slot.specialty,
+          patient: null,
+          service: null,
+        };
+      }
+    });
+
+    res.json(schedule);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ detail: 'Ошибка сервера' });
+  }
+});
+
+// Запуск сервера
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
+});
+

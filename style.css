@@ -633,7 +633,53 @@ footer {
     color: var(--secondary);
 }
 
+
 /* Responsive */
+
+/* Стили публичного расписания */
+.doctor-schedule-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.doctor-schedule-header {
+    display: flex;
+    align-items: baseline;
+    gap: 15px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--light-gray);
+    padding-bottom: 10px;
+}
+
+.doctor-schedule-header h3 {
+    color: var(--dark);
+    margin: 0;
+}
+
+.doctor-slots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+}
+
+.time-slot {
+    text-align: center;
+    padding: 12px 8px;
+}
+
+.time-slot.booked {
+    background-color: #ffeaea;
+    border-color: var(--danger);
+}
+
+.time-slot.available {
+    background-color: #e6fff2;
+    border-color: var(--success);
+}
+
 @media (max-width: 768px) {
     .header-container {
         flex-direction: column;
@@ -674,4 +720,5 @@ footer {
     .step-number {
         margin-bottom: 0;
     }
+    
 }

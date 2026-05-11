@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: dentapp_db
+    environment:
+      POSTGRES_USER: dentapp_user
+      POSTGRES_PASSWORD: dentapp_pass
+      POSTGRES_DB: dentapp_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      - postgres_data:/var/lib/postgresql/data
+volumes:
+  postgres_data:

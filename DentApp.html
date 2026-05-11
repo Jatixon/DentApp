@@ -22,7 +22,7 @@
                     <li><a href="#" class="nav-link" data-page="appointment">Запись на прием</a></li>
                     <li><a href="#" class="nav-link" data-page="diagnosis">Диагностика</a></li>
                     <li><a href="#" class="nav-link" data-page="history">История посещений</a></li>
-                    <li><a href="#" class="nav-link" data-page="schedule">Расписание (для врачей)</a></li>
+                    <li><a href="#" class="nav-link" data-page="schedule">Расписание</a></li>
                 </ul>
             </nav>
             <div class="auth-buttons" id="authButtons">
@@ -188,6 +188,14 @@
                 <div id="timeSlotsContainer">
                     <p>Выберите дату для просмотра доступных слотов</p>
                 </div>
+                <div class="calendar" id="appointmentCalendar" style="margin-bottom: 20px;">
+    <div class="calendar-header">
+        <button class="btn btn-outline" id="appPrevMonthBtn">←</button>
+        <h4 id="appCurrentMonth"></h4>
+        <button class="btn btn-outline" id="appNextMonthBtn">→</button>
+    </div>
+    <div class="calendar-days" id="appCalendarDays"></div>
+</div>
                 <div style="display: flex; gap: 15px; margin-top: 30px;">
                     <button class="btn btn-outline" id="prevStep3">← Назад</button>
                     <button class="btn btn-primary" id="nextStep3">Далее →</button>
@@ -269,12 +277,14 @@
 
         <!-- Schedule Page (for doctors) -->
         <section id="schedule" class="main-content">
-            <h2 class="page-title">Управление расписанием (для врачей)</h2>
+            <h2 class="page-title">Общее расписание клиники</h2>
             <div class="schedule-container">
-                <div class="schedule-header">
-                    <h3>Расписание приемов</h3>
-                    <button class="btn btn-primary" id="addScheduleSlotBtn">Добавить слот</button>
-                </div>
+                <div class="schedule-filter" style="margin-bottom: 20px;">
+                    <label for="scheduleDoctorFilter">Врач:</label>
+                    <select id="scheduleDoctorFilter" style="padding: 8px; border-radius: 8px; border: 1px solid #ccc;">
+                        <option value="all">Все врачи</option>
+                    </select>
+            </div>
                 
                 <div class="calendar">
                     <div class="calendar-header">
@@ -329,7 +339,7 @@
                     </div>
                     <div class="form-group">
                         <label for="registerPhone">Телефон</label>
-                        <input type="tel" id="registerPhone" required>
+                        <input type="tel" id="registerPhone" required pattern="[0-9+\s\-\(\)]+" title="Можно вводить только цифры, +, -, пробелы и скобки">
                         <div class="error-message" id="registerPhoneError"></div>
                     </div>
                     <div class="form-group">
@@ -384,5 +394,6 @@
     </footer>
 
     <script src="script.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
 </body>
 </html>

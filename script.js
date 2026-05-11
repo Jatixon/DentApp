@@ -1,3 +1,67 @@
+const API_BASE = '/api';
+
+let realDoctors = [];
+let realServices = [];
+
+async function loadDoctors() {
+  try {
+    const data = await apiRequest('/doctors');
+    realDoctors = data;
+    renderDoctors();
+  } catch (err) {
+    console.error('Ошибка загрузки врачей', err);
+  }
+}
+
+async function loadServices() {
+  try {
+    const data = await apiRequest('/services');
+    realServices = data;
+    const select = document.getElementById('serviceSelect');
+    if (select) {
+      select.innerHTML = '<option value="">-- Выберите услугу --</option>';
+      realServices.forEach(service => {
+        const option = document.createElement('option');
+        option.value = service.id;
+        option.textContent = service.name;
+        select.appendChild(option);
+      });
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки услуг', err);
+  }
+}
+
+async function loadAvailableSlots(doctorId, date) {
+  try {
+    const slots = await apiRequest(`/doctors/${doctorId}/slots?date=${date}`);
+    return slots;
+  } catch (err) {
+    console.error('Ошибка загрузки слотов', err);
+    return [];
+  }
+}
+
+async function apiRequest(endpoint, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  const token = localStorage.getItem('dentapp_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Ошибка запроса');
+  }
+  return response.json();
+}
+
 // Application State
 const state = {
     currentUser: null,
@@ -15,7 +79,7 @@ const state = {
     selectedDate: new Date()
 };
 
-// Mock Data
+// Mock Data (оставлено для совместимости с историей и диагностикой)
 const mockDoctors = [
     { id: 1, name: 'Петров Алексей Владимирович', specialty: 'Терапевт, хирург', experience: '12 лет', rating: 4.8 },
     { id: 2, name: 'Сидорова Ирина Петровна', specialty: 'Ортодонт', experience: '8 лет', rating: 4.9 },
@@ -90,6 +154,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (savedUser) {
         state.currentUser = JSON.parse(savedUser);
         updateAuthUI();
+        loadDoctors();
+        loadServices();
     }
 
     // Navigation
@@ -139,9 +205,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('applyHistoryFilter').addEventListener('click', applyHistoryFilter);
 
     // Schedule (for doctors)
-    document.getElementById('prevMonthBtn').addEventListener('click', prevMonth);
-    document.getElementById('nextMonthBtn').addEventListener('click', nextMonth);
-    document.getElementById('addScheduleSlotBtn').addEventListener('click', addScheduleSlot);
+    // В DOMContentLoaded замените обработчики календаря для schedule
+    document.getElementById('prevMonthBtn')?.addEventListener('click', prevMonth);
+    document.getElementById('nextMonthBtn')?.addEventListener('click', nextMonth);
+    // Кнопку "Добавить слот" можно скрыть или оставить только для врачей
+    const addSlotBtn = document.getElementById('addScheduleSlotBtn');
+    if (addSlotBtn) addSlotBtn.style.display = 'none';
 
     // Initialize appointment doctors
     renderDoctors();
@@ -151,37 +220,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize history
     renderHistory();
+
+    // Initialize appointment date picker
+    const appointmentDateInput = document.getElementById('appointmentDate');
+    if (appointmentDateInput) {
+        appointmentDateInput.addEventListener('change', renderTimeSlots);
+        // Set min date (сегодня) и default date (завтра) без сдвига
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        appointmentDateInput.setAttribute('min', `${y}-${m}-${d}`);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        const ty = tomorrow.getFullYear();
+        const tm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+        const td = String(tomorrow.getDate()).padStart(2, '0');
+        appointmentDateInput.value = `${ty}-${tm}-${td}`;
+    }
 });
 
 // Navigation
 function navigateTo(page) {
-    // Hide all pages
-    document.querySelectorAll('.main-content').forEach(section => {
-        section.classList.remove('active');
-    });
-
-    // Update active nav link
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('active');
-        if (link.getAttribute('data-page') === page) {
-            link.classList.add('active');
-        }
-    });
-
-    // Show selected page
-    document.getElementById(page).classList.add('active');
-    state.currentPage = page;
-
-    // Update page-specific content
-    if (page === 'dashboard') {
-        updateDashboard();
-    } else if (page === 'appointment') {
-        resetAppointment();
-    } else if (page === 'history') {
-        renderHistory();
-    } else if (page === 'schedule') {
-        renderCalendar();
-    }
+  if (page === 'dashboard' && !state.currentUser) {
+    showAuthModal();
+    return;
+  }
+  document.querySelectorAll('.main-content').forEach(section => section.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.classList.remove('active');
+    if (link.getAttribute('data-page') === page) link.classList.add('active');
+  });
+  document.getElementById(page).classList.add('active');
+  state.currentPage = page;
+  if (page === 'dashboard') updateDashboard();
+  else if (page === 'appointment') resetAppointment();
+  else if (page === 'history') renderHistory();
+  else if (page === 'schedule') initPublicSchedule();
 }
 
 // Auth functions
@@ -191,7 +266,6 @@ function showAuthModal() {
 
 function hideAuthModal() {
     document.getElementById('authModal').style.display = 'none';
-    // Clear form errors
     document.querySelectorAll('.error-message').forEach(el => {
         el.style.display = 'none';
         el.textContent = '';
@@ -200,7 +274,6 @@ function hideAuthModal() {
         el.style.display = 'none';
         el.textContent = '';
     });
-    // Clear form fields
     document.getElementById('loginForm').reset();
     document.getElementById('registerForm').reset();
 }
@@ -208,7 +281,6 @@ function hideAuthModal() {
 function switchAuthTab(tab) {
     document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-
     if (tab === 'login') {
         document.getElementById('loginTab').classList.add('active');
         document.getElementById('loginForm').classList.add('active');
@@ -218,188 +290,107 @@ function switchAuthTab(tab) {
     }
 }
 
-function login(e) {
-    e.preventDefault();
-    
-    const email = document.getElementById('loginEmail').value;
-    const password = document.getElementById('loginPassword').value;
-    
-    // Simple validation
-    let valid = true;
-    
-    if (!email) {
-        document.getElementById('loginEmailError').textContent = 'Введите email или телефон';
-        document.getElementById('loginEmailError').style.display = 'block';
-        valid = false;
-    } else {
-        document.getElementById('loginEmailError').style.display = 'none';
-    }
-    
-    if (!password) {
-        document.getElementById('loginPasswordError').textContent = 'Введите пароль';
-        document.getElementById('loginPasswordError').style.display = 'block';
-        valid = false;
-    } else {
-        document.getElementById('loginPasswordError').style.display = 'none';
-    }
-    
-    if (valid) {
-        // Mock login - in a real app, this would be an API call
-        // Check if user exists in localStorage
-        const users = JSON.parse(localStorage.getItem('dentapp_users') || '[]');
-        const user = users.find(u => (u.email === email || u.phone === email) && u.password === password);
-        
-        if (user) {
-            // Success
-            state.currentUser = {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone
-            };
-            
-            localStorage.setItem('dentapp_user', JSON.stringify(state.currentUser));
-            
-            document.getElementById('loginSuccess').textContent = 'Успешная авторизация! Перенаправление...';
-            document.getElementById('loginSuccess').style.display = 'block';
-            
-            setTimeout(() => {
-                hideAuthModal();
-                updateAuthUI();
-                navigateTo('dashboard');
-            }, 1000);
-        } else {
-            document.getElementById('loginPasswordError').textContent = 'Неверный email/телефон или пароль';
-            document.getElementById('loginPasswordError').style.display = 'block';
-        }
-    }
+async function login(e) {
+  e.preventDefault();
+  const credential = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  document.getElementById('loginEmailError').style.display = 'none';
+  document.getElementById('loginPasswordError').style.display = 'none';
+  try {
+    const data = await apiRequest('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ credential, password }),
+    });
+    localStorage.setItem('dentapp_token', data.access_token);
+    localStorage.setItem('dentapp_user', JSON.stringify(data.user));
+    state.currentUser = data.user;
+    document.getElementById('loginSuccess').textContent = 'Успешный вход!';
+    document.getElementById('loginSuccess').style.display = 'block';
+    setTimeout(() => {
+      hideAuthModal();
+      updateAuthUI();
+      navigateTo('dashboard');
+    }, 1000);
+  } catch (err) {
+    document.getElementById('loginPasswordError').textContent = err.message;
+    document.getElementById('loginPasswordError').style.display = 'block';
+  }
 }
 
-function register(e) {
-    e.preventDefault();
-    
-    const name = document.getElementById('registerName').value;
-    const phone = document.getElementById('registerPhone').value;
-    const email = document.getElementById('registerEmail').value;
-    const password = document.getElementById('registerPassword').value;
-    const confirmPassword = document.getElementById('registerConfirmPassword').value;
-    
-    // Validation
-    let valid = true;
-    
-    // Clear previous errors
-    document.querySelectorAll('#registerForm .error-message').forEach(el => {
-        el.style.display = 'none';
-        el.textContent = '';
+async function register(e) {
+  e.preventDefault();
+  document.querySelectorAll('#registerForm .error-message').forEach(el => {
+    el.style.display = 'none';
+    el.textContent = '';
+  });
+  document.querySelectorAll('#registerForm .success-message').forEach(el => {
+    el.style.display = 'none';
+    el.textContent = '';
+  });
+  const name = document.getElementById('registerName').value;
+  const phone = document.getElementById('registerPhone').value;
+  const email = document.getElementById('registerEmail').value;
+  const password = document.getElementById('registerPassword').value;
+  const confirmPassword = document.getElementById('registerConfirmPassword').value;
+
+  const phoneRegex = /^[\d+\-\s\(\)]+$/;
+  if (!phoneRegex.test(phone)) {
+    document.getElementById('registerPhoneError').textContent = 'Телефон может содержать только цифры и символы +, -, пробел, (, )';
+    document.getElementById('registerPhoneError').style.display = 'block';
+    return;
+  }
+  if (password !== confirmPassword) {
+    document.getElementById('registerConfirmPasswordError').textContent = 'Пароли не совпадают';
+    document.getElementById('registerConfirmPasswordError').style.display = 'block';
+    return;
+  }
+  try {
+    await apiRequest('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, phone, password }),
     });
-    
-    if (!name) {
-        document.getElementById('registerNameError').textContent = 'Введите ФИО';
-        document.getElementById('registerNameError').style.display = 'block';
-        valid = false;
-    }
-    
-    if (!phone) {
-        document.getElementById('registerPhoneError').textContent = 'Введите телефон';
-        document.getElementById('registerPhoneError').style.display = 'block';
-        valid = false;
-    }
-    
-    if (!email) {
-        document.getElementById('registerEmailError').textContent = 'Введите email';
-        document.getElementById('registerEmailError').style.display = 'block';
-        valid = false;
-    } else if (!email.includes('@')) {
-        document.getElementById('registerEmailError').textContent = 'Введите корректный email';
-        document.getElementById('registerEmailError').style.display = 'block';
-        valid = false;
-    }
-    
-    if (!password) {
-        document.getElementById('registerPasswordError').textContent = 'Введите пароль';
-        document.getElementById('registerPasswordError').style.display = 'block';
-        valid = false;
-    } else if (password.length < 6) {
-        document.getElementById('registerPasswordError').textContent = 'Пароль должен быть не менее 6 символов';
-        document.getElementById('registerPasswordError').style.display = 'block';
-        valid = false;
-    }
-    
-    if (password !== confirmPassword) {
-        document.getElementById('registerConfirmPasswordError').textContent = 'Пароли не совпадают';
-        document.getElementById('registerConfirmPasswordError').style.display = 'block';
-        valid = false;
-    }
-    
-    // Check if email is unique
-    if (email) {
-        const users = JSON.parse(localStorage.getItem('dentapp_users') || '[]');
-        const emailExists = users.some(u => u.email === email);
-        
-        if (emailExists) {
-            document.getElementById('registerEmailError').textContent = 'Этот email уже зарегистрирован';
-            document.getElementById('registerEmailError').style.display = 'block';
-            valid = false;
-        }
-    }
-    
-    if (valid) {
-        // Create user
-        const users = JSON.parse(localStorage.getItem('dentapp_users') || '[]');
-        const newUser = {
-            id: Date.now(),
-            name,
-            phone,
-            email,
-            password
-        };
-        
-        users.push(newUser);
-        localStorage.setItem('dentapp_users', JSON.stringify(users));
-        
-        // Auto-login
-        state.currentUser = {
-            id: newUser.id,
-            name: newUser.name,
-            email: newUser.email,
-            phone: newUser.phone
-        };
-        
-        localStorage.setItem('dentapp_user', JSON.stringify(state.currentUser));
-        
-        document.getElementById('registerSuccess').textContent = 'Аккаунт успешно создан! Выполняется автоматическая авторизация...';
-        document.getElementById('registerSuccess').style.display = 'block';
-        
-        setTimeout(() => {
-            hideAuthModal();
-            updateAuthUI();
-            navigateTo('dashboard');
-        }, 1500);
-    }
+    const loginData = await apiRequest('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ credential: email, password }),
+    });
+    localStorage.setItem('dentapp_token', loginData.access_token);
+    localStorage.setItem('dentapp_user', JSON.stringify(loginData.user));
+    state.currentUser = loginData.user;
+    document.getElementById('registerSuccess').textContent = 'Аккаунт создан! Выполняется вход...';
+    document.getElementById('registerSuccess').style.display = 'block';
+    setTimeout(() => {
+      hideAuthModal();
+      updateAuthUI();
+      navigateTo('dashboard');
+    }, 1500);
+  } catch (err) {
+    document.getElementById('registerEmailError').textContent = err.message;
+    document.getElementById('registerEmailError').style.display = 'block';
+  }
 }
 
 function logout() {
-    state.currentUser = null;
-    localStorage.removeItem('dentapp_user');
-    updateAuthUI();
-    navigateTo('home');
+  state.currentUser = null;
+  localStorage.removeItem('dentapp_token');
+  localStorage.removeItem('dentapp_user');
+  updateAuthUI();
+  navigateTo('home');
 }
 
 function updateAuthUI() {
     if (state.currentUser) {
-        // User is logged in
         document.getElementById('authButtons').style.display = 'none';
         document.getElementById('userInfo').style.display = 'flex';
-        
-        // Set user info
         document.getElementById('userName').textContent = state.currentUser.name;
         document.getElementById('userAvatar').textContent = getInitials(state.currentUser.name);
         document.getElementById('dashboardUserName').textContent = state.currentUser.name;
         document.getElementById('dashboardUserEmail').textContent = state.currentUser.email;
         document.getElementById('dashboardUserPhone').textContent = state.currentUser.phone;
         document.getElementById('dashboardUserAvatar').textContent = getInitials(state.currentUser.name);
+        // Загружаем данные для записи, если пользователь авторизован
+        loadDoctors();
+        loadServices();
     } else {
-        // User is not logged in
         document.getElementById('authButtons').style.display = 'flex';
         document.getElementById('userInfo').style.display = 'none';
     }
@@ -410,38 +401,51 @@ function getInitials(name) {
 }
 
 // Dashboard functions
-function updateDashboard() {
-    // Update upcoming appointments
-    const appointments = JSON.parse(localStorage.getItem('dentapp_appointments') || '[]');
-    const userAppointments = appointments.filter(a => a.userId === state.currentUser?.id);
-    
-    const upcomingAppointmentsContainer = document.getElementById('upcomingAppointments');
-    
-    if (userAppointments.length > 0) {
-        upcomingAppointmentsContainer.innerHTML = '';
-        userAppointments.forEach(appointment => {
-            const appointmentElement = document.createElement('div');
-            appointmentElement.innerHTML = `
-                <div style="padding: 10px; border-bottom: 1px solid var(--light-gray);">
-                    <div><strong>${appointment.service}</strong></div>
-                    <div>${appointment.doctor}</div>
-                    <div>${appointment.date} в ${appointment.time}</div>
-                </div>
-            `;
-            upcomingAppointmentsContainer.appendChild(appointmentElement);
-        });
+async function updateDashboard() {
+  if (!state.currentUser) return;
+  try {
+    const appointments = await apiRequest('/appointments');
+    const upcomingContainer = document.getElementById('upcomingAppointments');
+    if (!upcomingContainer) return;
+
+    if (appointments.length === 0) {
+      upcomingContainer.innerHTML = '<p>У вас нет запланированных приемов</p>';
     } else {
-        upcomingAppointmentsContainer.innerHTML = '<p>У вас нет запланированных приемов</p>';
+      upcomingContainer.innerHTML = '';
+      appointments.forEach(app => {
+        const div = document.createElement('div');
+        // Форматируем дату из ISO (например, "2026-05-04T17:00:00.000Z") в DD.MM.YYYY
+        let displayDate = app.appointment_date;
+        if (displayDate) {
+          const dateObj = new Date(displayDate);
+          // Проверяем, что дата валидная
+          if (!isNaN(dateObj.getTime())) {
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const year = dateObj.getFullYear();
+            displayDate = `${day}.${month}.${year}`;
+          }
+        }
+        div.innerHTML = `
+          <div style="padding: 10px; border-bottom: 1px solid var(--light-gray);">
+            <div><strong>${app.service_name}</strong></div>
+            <div>${app.doctor_name}</div>
+            <div>${displayDate} в ${app.appointment_time}</div>
+          </div>`;
+        upcomingContainer.appendChild(div);
+      });
     }
-    
-    // Update visit stats
-    const history = JSON.parse(localStorage.getItem('dentapp_history') || '[]');
-    const userHistory = history.filter(h => h.userId === state.currentUser?.id);
-    
-    document.getElementById('visitStats').innerHTML = `
-        <p>Всего посещений: <strong>${userHistory.length}</strong></p>
-        <p>Последний визит: <strong>${userHistory.length > 0 ? userHistory[0].date : 'нет данных'}</strong></p>
-    `;
+
+    // Обновление статистики посещений (пока заглушка, можно заменить на реальные данные)
+    const historyStats = document.getElementById('visitStats');
+    if (historyStats) {
+      historyStats.innerHTML = `<p>Всего посещений: <strong>0</strong></p><p>Последний визит: <strong>нет данных</strong></p>`;
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки записей в дашборде:', err);
+    const upcomingContainer = document.getElementById('upcomingAppointments');
+    if (upcomingContainer) upcomingContainer.innerHTML = '<p>Ошибка загрузки записей</p>';
+  }
 }
 
 function editProfile() {
@@ -450,39 +454,37 @@ function editProfile() {
 
 // Appointment functions
 function renderDoctors() {
-    const container = document.getElementById('doctorsGrid');
-    container.innerHTML = '';
-    
-    mockDoctors.forEach(doctor => {
-        const doctorCard = document.createElement('div');
-        doctorCard.className = 'doctor-card';
-        doctorCard.setAttribute('data-doctor-id', doctor.id);
-        doctorCard.innerHTML = `
-            <h4>${doctor.name}</h4>
-            <div class="doctor-specialty">${doctor.specialty}</div>
-            <div>Опыт: ${doctor.experience}</div>
-            <div>Рейтинг: ${doctor.rating} ★</div>
-        `;
-        
-        doctorCard.addEventListener('click', function() {
-            document.querySelectorAll('.doctor-card').forEach(card => {
-                card.classList.remove('selected');
-            });
-            this.classList.add('selected');
-            state.appointmentData.doctor = doctor;
-        });
-        
-        container.appendChild(doctorCard);
+  const container = document.getElementById('doctorsGrid');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!realDoctors.length) {
+    container.innerHTML = '<p>Загрузка врачей...</p>';
+    return;
+  }
+  realDoctors.forEach(doctor => {
+    const doctorCard = document.createElement('div');
+    doctorCard.className = 'doctor-card';
+    doctorCard.setAttribute('data-doctor-id', doctor.id);
+    doctorCard.innerHTML = `
+      <h4>${doctor.name}</h4>
+      <div class="doctor-specialty">${doctor.specialty || ''}</div>
+      <div>Опыт: ${doctor.experience_years || ''} лет</div>
+      <div>Рейтинг: ${doctor.rating || '—'} ★</div>
+    `;
+    doctorCard.addEventListener('click', () => {
+      document.querySelectorAll('.doctor-card').forEach(card => card.classList.remove('selected'));
+      doctorCard.classList.add('selected');
+      state.appointmentData.doctor = doctor;
     });
+    container.appendChild(doctorCard);
+  });
 }
 
 function nextAppointmentStep() {
     const currentStep = document.querySelector('.appointment-steps .step.active');
+    if (!currentStep) return;
     const currentStepNum = parseInt(currentStep.getAttribute('data-step'));
-    
-    // Validate current step
     let valid = true;
-    
     if (currentStepNum === 1) {
         const service = document.getElementById('serviceSelect').value;
         if (!service) {
@@ -499,7 +501,6 @@ function nextAppointmentStep() {
     } else if (currentStepNum === 3) {
         const date = document.getElementById('appointmentDate').value;
         const selectedTimeSlot = document.querySelector('.time-slot-card.selected');
-        
         if (!date) {
             alert('Выберите дату');
             valid = false;
@@ -511,29 +512,17 @@ function nextAppointmentStep() {
             state.appointmentData.time = selectedTimeSlot.getAttribute('data-time');
         }
     }
-    
     if (!valid) return;
-    
-    // Update steps UI
     currentStep.classList.remove('active');
     currentStep.classList.add('completed');
-    
     const nextStep = document.querySelector(`.appointment-steps .step[data-step="${currentStepNum + 1}"]`);
-    nextStep.classList.add('active');
-    
-    // Hide current form section
+    if (nextStep) nextStep.classList.add('active');
     document.getElementById(`step${currentStepNum}`).classList.remove('active');
-    
-    // Show next form section
     if (currentStepNum + 1 <= 4) {
         document.getElementById(`step${currentStepNum + 1}`).classList.add('active');
-        
-        // If moving to step 3, render time slots
         if (currentStepNum + 1 === 3) {
             renderTimeSlots();
         }
-        
-        // If moving to step 4, render summary
         if (currentStepNum + 1 === 4) {
             renderAppointmentSummary();
         }
@@ -542,87 +531,53 @@ function nextAppointmentStep() {
 
 function prevAppointmentStep() {
     const currentStep = document.querySelector('.appointment-steps .step.active');
+    if (!currentStep) return;
     const currentStepNum = parseInt(currentStep.getAttribute('data-step'));
-    
     if (currentStepNum === 1) return;
-    
-    // Update steps UI
     currentStep.classList.remove('active');
-    
     const prevStep = document.querySelector(`.appointment-steps .step[data-step="${currentStepNum - 1}"]`);
-    prevStep.classList.remove('completed');
-    prevStep.classList.add('active');
-    
-    // Hide current form section
+    if (prevStep) {
+        prevStep.classList.remove('completed');
+        prevStep.classList.add('active');
+    }
     document.getElementById(`step${currentStepNum}`).classList.remove('active');
-    
-    // Show previous form section
     document.getElementById(`step${currentStepNum - 1}`).classList.add('active');
 }
 
-function renderTimeSlots() {
-    const container = document.getElementById('timeSlotsContainer');
-    const date = document.getElementById('appointmentDate').value;
-    
-    if (!date) {
-        container.innerHTML = '<p>Выберите дату для просмотра доступных слотов</p>';
-        return;
-    }
-    
-    // Mock time slots
-    const timeSlots = [
-        '09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00'
-    ];
-    
-    // Some random slots are "booked"
-    const bookedSlots = ['10:00', '14:00'];
-    
-    container.innerHTML = '<h4>Доступные слоты:</h4><div class="time-slots-grid" id="timeSlotsGrid"></div>';
-    const grid = document.getElementById('timeSlotsGrid');
-    
-    timeSlots.forEach(slot => {
-        const isBooked = bookedSlots.includes(slot);
-        const slotCard = document.createElement('div');
-        slotCard.className = `time-slot-card ${isBooked ? 'booked' : ''}`;
-        slotCard.setAttribute('data-time', slot);
-        
-        if (isBooked) {
-            slotCard.innerHTML = `
-                <div style="text-align: center;">
-                    <div><strong>${slot}</strong></div>
-                    <div style="color: var(--danger); font-size: 0.9rem;">Занято</div>
-                </div>
-            `;
-        } else {
-            slotCard.innerHTML = `
-                <div style="text-align: center;">
-                    <div><strong>${slot}</strong></div>
-                    <div style="color: var(--success); font-size: 0.9rem;">Свободно</div>
-                </div>
-            `;
-            
-            slotCard.addEventListener('click', function() {
-                if (this.classList.contains('selected')) {
-                    this.classList.remove('selected');
-                    state.appointmentData.time = '';
-                } else {
-                    document.querySelectorAll('.time-slot-card').forEach(card => {
-                        card.classList.remove('selected');
-                    });
-                    this.classList.add('selected');
-                    state.appointmentData.time = slot;
-                }
-            });
-        }
-        
-        grid.appendChild(slotCard);
+async function renderTimeSlots() {
+  const container = document.getElementById('timeSlotsContainer');
+  const date = document.getElementById('appointmentDate').value;
+  const doctor = state.appointmentData.doctor;
+  if (!date || !doctor) {
+    container.innerHTML = '<p>Выберите врача и дату для просмотра слотов</p>';
+    return;
+  }
+  container.innerHTML = '<p>Загрузка...</p>';
+  const slots = await loadAvailableSlots(doctor.id, date);
+  if (slots.length === 0) {
+    container.innerHTML = '<p>Нет доступных слотов на выбранную дату</p>';
+    return;
+  }
+  container.innerHTML = '<h4>Доступные слоты:</h4><div class="time-slots-grid" id="timeSlotsGrid"></div>';
+  const grid = document.getElementById('timeSlotsGrid');
+  grid.innerHTML = '';
+  slots.forEach(slot => {
+    const slotCard = document.createElement('div');
+    slotCard.className = 'time-slot-card';
+    slotCard.setAttribute('data-time', slot);
+    slotCard.innerHTML = `<div style="text-align:center;"><strong>${slot}</strong><div style="color:var(--success);">Свободно</div></div>`;
+    slotCard.addEventListener('click', function() {
+      document.querySelectorAll('.time-slot-card').forEach(card => card.classList.remove('selected'));
+      this.classList.add('selected');
+      state.appointmentData.time = slot;
     });
+    grid.appendChild(slotCard);
+  });
 }
 
 function renderAppointmentSummary() {
     const container = document.getElementById('appointmentSummary');
-    const service = mockServices.find(s => s.id === state.appointmentData.service);
-    
+    const service = realServices.find(s => s.id == state.appointmentData.service);
     container.innerHTML = `
         <div style="background-color: var(--light-gray); padding: 20px; border-radius: var(--border-radius);">
             <h4>Детали записи</h4>
@@ -636,43 +591,39 @@ function renderAppointmentSummary() {
     `;
 }
 
-function confirmAppointment() {
-    if (!state.currentUser) {
-        alert('Для записи на прием необходимо авторизоваться');
-        showAuthModal();
-        return;
-    }
-    
-    // Save appointment
-    const appointments = JSON.parse(localStorage.getItem('dentapp_appointments') || '[]');
-    const service = mockServices.find(s => s.id === state.appointmentData.service);
-    
-    const newAppointment = {
-        id: Date.now(),
-        userId: state.currentUser.id,
-        service: service ? service.name : state.appointmentData.service,
-        doctor: state.appointmentData.doctor.name,
-        date: formatDate(state.appointmentData.date),
-        time: state.appointmentData.time,
-        status: 'confirmed'
-    };
-    
-    appointments.push(newAppointment);
-    localStorage.setItem('dentapp_appointments', JSON.stringify(appointments));
-    
-    // Show success message
+async function confirmAppointment() {
+  if (!state.currentUser) {
+    alert('Для записи на прием необходимо авторизоваться');
+    showAuthModal();
+    return;
+  }
+  const serviceId = document.getElementById('serviceSelect').value;
+  const doctor = state.appointmentData.doctor;
+  const date = state.appointmentData.date;
+  const time = state.appointmentData.time;
+  if (!serviceId || !doctor || !date || !time) {
+    alert('Заполните все шаги');
+    return;
+  }
+  try {
+    await apiRequest('/appointments', {
+      method: 'POST',
+      body: JSON.stringify({
+        doctor_id: doctor.id,
+        service_id: parseInt(serviceId),
+        date: date,
+        time: time,
+        notes: ''
+      })
+    });
     document.getElementById('step4').style.display = 'none';
     document.getElementById('appointmentSuccess').style.display = 'block';
-    
-    // Update steps UI
-    document.querySelectorAll('.appointment-steps .step').forEach(step => {
-        step.classList.remove('active', 'completed');
-    });
-    
+    document.querySelectorAll('.appointment-steps .step').forEach(step => step.classList.remove('active', 'completed'));
     document.querySelector('.appointment-steps .step[data-step="4"]').classList.add('completed');
-    
-    // Update dashboard
     updateDashboard();
+  } catch (err) {
+    alert('Ошибка записи: ' + err.message);
+  }
 }
 
 function startNewAppointment() {
@@ -688,20 +639,15 @@ function resetAppointment() {
         date: '',
         time: ''
     };
-    
-    // Reset steps UI
     document.querySelectorAll('.appointment-steps .step').forEach(step => {
         step.classList.remove('active', 'completed');
     });
-    
-    document.querySelector('.appointment-steps .step[data-step="1"]').classList.add('active');
-    
-    // Reset forms
+    const firstStep = document.querySelector('.appointment-steps .step[data-step="1"]');
+    if (firstStep) firstStep.classList.add('active');
     document.getElementById('serviceSelect').value = '';
     document.querySelectorAll('.appointment-form-section').forEach(section => {
         section.classList.remove('active');
     });
-    
     document.getElementById('step1').classList.add('active');
     document.getElementById('appointmentSuccess').style.display = 'none';
 }
@@ -710,23 +656,19 @@ function resetAppointment() {
 function startDiagnosis() {
     state.diagnosisStep = 0;
     state.diagnosisAnswers = [];
-    
     document.getElementById('diagnosisIntro').style.display = 'none';
     document.getElementById('diagnosisQuestions').style.display = 'block';
     document.getElementById('diagnosisResult').style.display = 'none';
-    
     showDiagnosisQuestion();
 }
 
 function showDiagnosisQuestion() {
     const container = document.getElementById('diagnosisQuestions');
     const question = mockDiagnosisQuestions[state.diagnosisStep];
-    
     if (!question) {
         showDiagnosisResult();
         return;
     }
-    
     container.innerHTML = `
         <div class="diagnosis-question">
             <h3>Вопрос ${state.diagnosisStep + 1} из ${mockDiagnosisQuestions.length}</h3>
@@ -734,30 +676,24 @@ function showDiagnosisQuestion() {
             <div class="diagnosis-options" id="diagnosisOptions"></div>
         </div>
     `;
-    
     const optionsContainer = document.getElementById('diagnosisOptions');
-    
     question.options.forEach(option => {
         const optionElement = document.createElement('div');
         optionElement.className = 'diagnosis-option';
         optionElement.textContent = option.text;
         optionElement.setAttribute('data-value', option.value);
-        
         optionElement.addEventListener('click', function() {
             state.diagnosisAnswers.push({
                 questionId: question.id,
                 value: this.getAttribute('data-value')
             });
-            
             state.diagnosisStep++;
-            
             if (state.diagnosisStep < mockDiagnosisQuestions.length) {
                 showDiagnosisQuestion();
             } else {
                 showDiagnosisResult();
             }
         });
-        
         optionsContainer.appendChild(optionElement);
     });
 }
@@ -765,14 +701,10 @@ function showDiagnosisQuestion() {
 function showDiagnosisResult() {
     document.getElementById('diagnosisQuestions').style.display = 'none';
     document.getElementById('diagnosisResult').style.display = 'block';
-    
-    // Simple logic to determine recommendation based on answers
     let recommendation = 'Рекомендуется запись к стоматологу-терапевту';
     let diagnosis = 'Предположительно: нет серьезных проблем';
-    
     const hasSeverePain = state.diagnosisAnswers.some(a => a.value === 'severe_pain');
     const hasRegularBleeding = state.diagnosisAnswers.some(a => a.value === 'regular_bleeding');
-    
     if (hasSeverePain) {
         recommendation = 'Рекомендуется срочная запись к стоматологу-хирургу';
         diagnosis = 'Предположительно: острый пульпит или периодонтит';
@@ -780,7 +712,6 @@ function showDiagnosisResult() {
         recommendation = 'Рекомендуется запись к пародонтологу';
         diagnosis = 'Предположительно: гингивит или пародонтит';
     }
-    
     document.getElementById('diagnosisResult').innerHTML = `
         <h3>Результаты предварительной диагностики</h3>
         <div style="margin: 20px 0;">
@@ -798,11 +729,10 @@ function showDiagnosisResult() {
             <button class="btn btn-outline" id="restartDiagnosis">Пройти диагностику еще раз</button>
         </div>
     `;
-    
+    // Обработчики кнопок
     document.getElementById('bookAppointmentFromDiagnosis').addEventListener('click', () => {
         navigateTo('appointment');
     });
-    
     document.getElementById('restartDiagnosis').addEventListener('click', startDiagnosis);
 }
 
@@ -810,46 +740,39 @@ function showDiagnosisResult() {
 function renderHistory() {
     const container = document.getElementById('historyList');
     const emptyMessage = document.getElementById('emptyHistoryMessage');
-    
-    // Get user's history
     let history = JSON.parse(localStorage.getItem('dentapp_history') || '[]');
-    
-    // If user is logged in, filter their history
     if (state.currentUser) {
         history = history.filter(h => h.userId === state.currentUser.id);
     }
-    
-    // If no history, use mock data for demo
     if (history.length === 0) {
         history = mockHistory;
     }
-    
     if (history.length === 0) {
-        emptyMessage.style.display = 'block';
-        container.innerHTML = '';
+        if (emptyMessage) emptyMessage.style.display = 'block';
+        if (container) container.innerHTML = '';
     } else {
-        emptyMessage.style.display = 'none';
-        container.innerHTML = '';
-        
-        history.forEach(item => {
-            const historyItem = document.createElement('div');
-            historyItem.className = 'history-item';
-            historyItem.innerHTML = `
-                <div class="history-date">${item.date}</div>
-                <div class="history-doctor"><strong>Врач:</strong> ${item.doctor}</div>
-                <div><strong>Услуга:</strong> ${item.service}</div>
-                <div><strong>Диагноз:</strong> ${item.diagnosis}</div>
-                <div><strong>Рекомендации:</strong> ${item.recommendations}</div>
-                <div><strong>Стоимость:</strong> ${item.cost}</div>
-                <button class="btn btn-outline" style="margin-top: 10px;" onclick="viewVisitDetails(${item.id})">Подробнее</button>
-            `;
-            container.appendChild(historyItem);
-        });
+        if (emptyMessage) emptyMessage.style.display = 'none';
+        if (container) {
+            container.innerHTML = '';
+            history.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                historyItem.innerHTML = `
+                    <div class="history-date">${item.date}</div>
+                    <div class="history-doctor"><strong>Врач:</strong> ${item.doctor}</div>
+                    <div><strong>Услуга:</strong> ${item.service}</div>
+                    <div><strong>Диагноз:</strong> ${item.diagnosis}</div>
+                    <div><strong>Рекомендации:</strong> ${item.recommendations}</div>
+                    <div><strong>Стоимость:</strong> ${item.cost}</div>
+                    <button class="btn btn-outline" style="margin-top: 10px;" onclick="viewVisitDetails(${item.id})">Подробнее</button>
+                `;
+                container.appendChild(historyItem);
+            });
+        }
     }
 }
 
 function applyHistoryFilter() {
-    // In a real app, this would filter the history
     alert('Фильтр применен. В реальном приложении здесь будет фильтрация истории.');
     renderHistory();
 }
@@ -859,14 +782,22 @@ function viewVisitDetails(id) {
 }
 
 // Schedule functions (for doctors)
+// ===================== ПУБЛИЧНОЕ РАСПИСАНИЕ (ВСЕ ВРАЧИ) =====================
+
+// Состояние расписания (добавим выбор врача)
+state.scheduleDoctor = 'all'; // 'all' или id врача
+state.scheduleDate = new Date(); // выбранная дата
+
+// Обновлённый renderCalendar – теперь без проверок роли
 function renderCalendar() {
     const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-    document.getElementById('currentMonth').textContent = `${monthNames[state.currentMonth]} ${state.currentYear}`;
-    
+    const currentMonthEl = document.getElementById('currentMonth');
+    if (currentMonthEl) currentMonthEl.textContent = `${monthNames[state.currentMonth]} ${state.currentYear}`;
+
     const daysContainer = document.getElementById('calendarDays');
+    if (!daysContainer) return;
     daysContainer.innerHTML = '';
-    
-    // Add day headers
+
     const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     dayNames.forEach(day => {
         const dayElement = document.createElement('div');
@@ -875,101 +806,214 @@ function renderCalendar() {
         dayElement.textContent = day;
         daysContainer.appendChild(dayElement);
     });
-    
-    // Get first day of month
+
     const firstDay = new Date(state.currentYear, state.currentMonth, 1);
-    const startingDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // Adjust for Monday start
-    
-    // Add empty cells for days before the first day of month
+    let startingDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+
     for (let i = 0; i < startingDay; i++) {
         const emptyDay = document.createElement('div');
         emptyDay.className = 'calendar-day';
         emptyDay.style.visibility = 'hidden';
         daysContainer.appendChild(emptyDay);
     }
-    
-    // Get days in month
+
     const daysInMonth = new Date(state.currentYear, state.currentMonth + 1, 0).getDate();
-    
-    // Add days of month
     const today = new Date();
-    const isToday = (day) => {
-        return day === today.getDate() && 
-               state.currentMonth === today.getMonth() && 
-               state.currentYear === today.getFullYear();
-    };
-    
+
     for (let day = 1; day <= daysInMonth; day++) {
         const dayElement = document.createElement('div');
         dayElement.className = 'calendar-day';
-        if (isToday(day)) {
-            dayElement.classList.add('active');
+        if (day === today.getDate() && state.currentMonth === today.getMonth() && state.currentYear === today.getFullYear()) {
+            dayElement.classList.add('today'); // опциональный класс
         }
         dayElement.textContent = day;
-        
-        dayElement.addEventListener('click', function() {
-            document.querySelectorAll('.calendar-day').forEach(d => {
-                d.classList.remove('active');
-            });
-            this.classList.add('active');
-            
+        dayElement.addEventListener('click', () => {
+            document.querySelectorAll('.calendar-day').forEach(d => d.classList.remove('active'));
+            dayElement.classList.add('active');
             state.selectedDate = new Date(state.currentYear, state.currentMonth, day);
-            document.getElementById('selectedDateText').textContent = formatDate(state.selectedDate);
-            
-            renderScheduleForDay();
+            const selectedText = document.getElementById('selectedDateText');
+            if (selectedText) selectedText.textContent = formatDate(state.selectedDate);
+            renderPublicSchedule();
         });
-        
         daysContainer.appendChild(dayElement);
     }
-    
-    // Set today as selected if not already selected
+
+    // Если ни одна дата не выбрана, выбираем сегодняшнюю
     if (!document.querySelector('.calendar-day.active')) {
-        const todayElement = Array.from(daysContainer.querySelectorAll('.calendar-day')).find(el => {
-            return el.textContent === today.getDate().toString() && 
-                   !isNaN(parseInt(el.textContent));
+        const todayEl = Array.from(daysContainer.querySelectorAll('.calendar-day')).find(el => {
+            return parseInt(el.textContent) === today.getDate() &&
+                   state.currentMonth === today.getMonth() &&
+                   state.currentYear === today.getFullYear();
         });
-        if (todayElement) {
-            todayElement.click();
-        }
-    } else {
-        renderScheduleForDay();
+        if (todayEl) todayEl.click();
     }
 }
 
-function renderScheduleForDay() {
+// Загрузка и отображение публичного расписания
+async function renderPublicSchedule() {
     const container = document.getElementById('scheduleTimeSlots');
-    container.innerHTML = '';
-    
-    // Mock schedule data
-    const timeSlots = [
-        { time: '09:00', status: 'booked', patient: 'Иванов И.И.' },
-        { time: '10:00', status: 'available', patient: null },
-        { time: '11:00', status: 'booked', patient: 'Петров П.П.' },
-        { time: '12:00', status: 'available', patient: null },
-        { time: '14:00', status: 'booked', patient: 'Сидорова С.С.' },
-        { time: '15:00', status: 'available', patient: null },
-        { time: '16:00', status: 'available', patient: null },
-        { time: '17:00', status: 'booked', patient: 'Козлов К.К.' }
-    ];
-    
-    timeSlots.forEach(slot => {
-        const slotElement = document.createElement('div');
-        slotElement.className = `time-slot ${slot.status}`;
-        slotElement.innerHTML = `
-            <div><strong>${slot.time}</strong></div>
-            <div>${slot.status === 'booked' ? `Запись: ${slot.patient}` : 'Свободно'}</div>
-        `;
-        
-        if (slot.status === 'available') {
-            slotElement.addEventListener('click', function() {
-                if (confirm(`Добавить слот ${slot.time} в расписание?`)) {
-                    alert(`Слот ${slot.time} добавлен в расписание на ${formatDate(state.selectedDate)}`);
-                }
-            });
+    if (!container) return;
+    container.innerHTML = '<p>Загрузка...</p>';
+
+    const selectedDate = state.selectedDate;
+    const formattedDate = selectedDate.toISOString().split('T')[0];
+    const doctorId = state.scheduleDoctor; // 'all' или конкретный id
+
+    try {
+        let url = `/api/public/schedule?date=${formattedDate}`;
+        if (doctorId !== 'all') {
+            url += `&doctorId=${doctorId}`;
         }
-        
-        container.appendChild(slotElement);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Ошибка загрузки');
+        const slots = await response.json();
+
+        if (!slots || slots.length === 0) {
+            container.innerHTML = '<p>На выбранную дату нет слотов</p>';
+            return;
+        }
+
+        container.innerHTML = '';
+        // Группируем слоты по врачам
+        const groupedByDoctor = {};
+        slots.forEach(slot => {
+            const key = slot.doctor_name;
+            if (!groupedByDoctor[key]) {
+                groupedByDoctor[key] = {
+                    doctor_name: slot.doctor_name,
+                    specialty: slot.specialty,
+                    doctor_id: slot.doctor_id,
+                    slots: []
+                };
+            }
+            groupedByDoctor[key].slots.push(slot);
+        });
+
+        // Отрисовываем карточки врачей
+        Object.values(groupedByDoctor).forEach(doctor => {
+            const doctorCard = document.createElement('div');
+            doctorCard.className = 'doctor-schedule-card';
+            doctorCard.innerHTML = `
+                <div class="doctor-schedule-header">
+                    <h3>${doctor.doctor_name}</h3>
+                    <span class="doctor-specialty">${doctor.specialty}</span>
+                </div>
+                <div class="doctor-slots-grid">
+                    ${doctor.slots.map(slot => `
+                        <div class="time-slot ${slot.status}">
+                            <div class="slot-time">${slot.time}</div>
+                            <div class="slot-info">
+                                ${slot.status === 'booked' 
+                                    ? `<span class="patient">👤 ${slot.patient}</span><br><span class="service">💊 ${slot.service}</span>`
+                                    : `<span class="free">Свободно</span>`
+                                }
+                            </div>
+                        </div>
+                            `).join('')}
+                </div>
+            `;
+            container.appendChild(doctorCard);
+        });
+
+    } catch (err) {
+        console.error(err);
+        container.innerHTML = '<p>Ошибка загрузки расписания</p>';
+    }
+}
+
+// Инициализация публичной страницы расписания (вызывается при переходе)
+// Инициализация публичной страницы расписания (вызывается при переходе)
+function initPublicSchedule() {
+    // Загружаем список врачей для фильтра
+    const doctorFilter = document.getElementById('scheduleDoctorFilter');
+    if (doctorFilter) {
+        // Показываем заглушку на время загрузки
+        doctorFilter.innerHTML = '<option value="all">Все врачи</option>';
+        // Загружаем врачей с публичного API
+        fetch('/api/public/doctors')
+            .then(r => r.json())
+            .then(doctors => {
+                doctorFilter.innerHTML = '<option value="all">Все врачи</option>';
+                doctors.forEach(doc => {
+                    doctorFilter.innerHTML += `<option value="${doc.id}">${doc.name}</option>`;
+                });
+                // Восстанавливаем ранее выбранного врача (если был)
+                doctorFilter.value = state.scheduleDoctor;
+                // Сразу загружаем расписание после получения списка
+                renderPublicSchedule();
+            })
+            .catch(err => {
+                console.error('Ошибка загрузки списка врачей для фильтра:', err);
+                doctorFilter.innerHTML = '<option value="all">Все врачи</option>';
+                renderPublicSchedule();
+            });
+    } else {
+        // Если фильтра нет, просто обновляем расписание
+        renderPublicSchedule();
+    }
+
+    // Обновляем календарь
+    renderCalendar();
+}
+
+// Добавляем обработчик фильтра по врачу в setup
+// (вызови этот код в DOMContentLoaded, например)
+document.getElementById('scheduleDoctorFilter')?.addEventListener('change', function() {
+    state.scheduleDoctor = this.value;
+    renderPublicSchedule();
+});
+
+// При загрузке страницы schedule
+// В navigateTo добавить вызов initPublicSchedule() когда page === 'schedule'
+
+async function renderScheduleForDay() {
+  const container = document.getElementById('scheduleTimeSlots');
+  if (!container) return;
+  container.innerHTML = '<p>Загрузка...</p>';
+
+  if (!state.currentUser || state.currentUser.role !== 'doctor') {
+    container.innerHTML = '<p>Эта страница доступна только врачам</p>';
+    return;
+  }
+
+  const selectedDate = state.selectedDate;
+  const formattedDate = selectedDate.toISOString().split('T')[0];
+
+  try {
+    const slots = await apiRequest(`/doctor/schedule?date=${formattedDate}`);
+    if (!slots || slots.length === 0) {
+      container.innerHTML = '<p>На эту дату нет слотов расписания</p>';
+      return;
+    }
+
+    container.innerHTML = '';
+    slots.forEach(slot => {
+      const slotEl = document.createElement('div');
+      slotEl.className = `time-slot ${slot.status}`;
+      if (slot.status === 'booked') {
+        slotEl.innerHTML = `
+          <div><strong>${slot.time}</strong></div>
+          <div>👤 ${slot.patient}</div>
+          <div>💊 ${slot.service}</div>
+          <div style="color: var(--danger); font-size: 0.8rem;">Занято</div>
+        `;
+      } else if (slot.status === 'available') {
+        slotEl.innerHTML = `
+          <div><strong>${slot.time}</strong></div>
+          <div style="color: var(--success);">Свободно</div>
+        `;
+      } else {
+        slotEl.innerHTML = `
+          <div><strong>${slot.time}</strong></div>
+          <div style="color: var(--gray);">Недоступно</div>
+        `;
+      }
+      container.appendChild(slotEl);
     });
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = '<p>Ошибка загрузки расписания</p>';
+  }
 }
 
 function prevMonth() {
@@ -999,7 +1043,6 @@ function addScheduleSlot() {
 // Utility functions
 function formatDate(dateString) {
     if (!dateString) return '';
-    
     const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
     return date.toLocaleDateString('ru-RU', {
         day: '2-digit',
@@ -1008,14 +1051,44 @@ function formatDate(dateString) {
     });
 }
 
-// Initialize appointment date picker
-document.getElementById('appointmentDate').addEventListener('change', renderTimeSlots);
+// =====================================================
+// Салют из белых зубов при клике
+// =====================================================
+document.addEventListener('click', function(e) {
+    if (e.button !== 0) return;
+    const interactiveSelectors = 'button, a, .btn, .nav-link, .doctor-card, .time-slot-card, .diagnosis-option, .step, .calendar-day, .time-slot, input, select';
+    if (e.target.closest(interactiveSelectors)) return;
+    createToothBurst(e.clientX, e.clientY);
+});
 
-// Set minimum date to today
-const today = new Date().toISOString().split('T')[0];
-document.getElementById('appointmentDate').setAttribute('min', today);
-
-// Set default date to tomorrow
-const tomorrow = new Date();
-tomorrow.setDate(tomorrow.getDate() + 1);
-document.getElementById('appointmentDate').value = tomorrow.toISOString().split('T')[0];
+function createToothBurst(x, y) {
+    const count = 30;
+    const duration = 1200;
+    for (let i = 0; i < count; i++) {
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.left = x + 'px';
+        container.style.top = y + 'px';
+        container.style.pointerEvents = 'none';
+        container.style.zIndex = '9999';
+        container.style.transition = `all ${duration / 1000}s ease-out`;
+        container.style.fontSize = (Math.random() * 20 + 16) + 'px';
+        container.style.color = '#ffffff';
+        container.style.textShadow = '0 0 2px rgba(0,0,0,0.5)';
+        container.style.width = 'auto';
+        container.style.height = 'auto';
+        container.innerHTML = '<i class="fas fa-tooth"></i>';
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 200 + 50;
+        const dx = Math.cos(angle) * distance;
+        const dy = Math.sin(angle) * distance;
+        document.body.appendChild(container);
+        requestAnimationFrame(() => {
+            container.style.transform = `translate(${dx}px, ${dy}px)`;
+            container.style.opacity = '0';
+        });
+        setTimeout(() => {
+            if (container.parentNode) container.parentNode.removeChild(container);
+        }, duration);
+    }
+}
