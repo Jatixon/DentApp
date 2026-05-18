@@ -14,7 +14,6 @@
 
 * {
     margin: 0;
-    padding: 0;
     box-sizing: border-box;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -41,10 +40,11 @@ header {
     z-index: 100;
 }
 
+
 .header-container {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     padding: 15px 0;
 }
 
@@ -52,39 +52,74 @@ header {
     display: flex;
     align-items: center;
     gap: 10px;
-    font-size: 1.8rem;
+    font-size: 2.2rem;   /* было 1.8rem, увеличено до 2.2rem */
     font-weight: 700;
     color: var(--primary);
 }
 
-.logo i {
-    color: var(--secondary);
+nav {
+    flex: 1;
+    display: flex;
+    justify-content: center;
 }
 
 nav ul {
     display: flex;
     list-style: none;
-    gap: 25px;
+    gap: 1rem;                    /* расстояние между пунктами будет внутри li */
+    margin: 0;
+    padding: 0;
+    width: 100%;               /* растягиваем на всю доступную ширину */
+}
+
+nav li {
+    flex: 1;                   /* все пункты одинаковой ширины */
+    text-align: center;
 }
 
 nav a {
+    display: block;
     text-decoration: none;
     color: var(--dark);
     font-weight: 500;
-    padding: 8px 12px;
+    padding: 10px 8px;
     border-radius: var(--border-radius);
     transition: all 0.3s ease;
+    white-space: nowrap;       /* чтобы длинные названия не переносились */
 }
 
-nav a:hover, nav a.active {
+nav a:hover,
+nav a.active {
     background-color: var(--primary);
     color: white;
+}
+
+/* Правый блок – кнопки, колокольчик, аватар */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+    margin-left: 20px;         /* небольшой отступ от меню */
 }
 
 .auth-buttons {
     display: flex;
     gap: 10px;
 }
+
+
+.logo i {
+    color: var(--secondary);
+}
+
+
+
+
+
+
+
+
 
 .btn {
     padding: 10px 20px;
@@ -300,7 +335,7 @@ nav a:hover, nav a.active {
 .user-info {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 10px;
 }
 
 .user-avatar {
@@ -639,26 +674,35 @@ footer {
     font-size: 1.5rem;
     color: var(--dark);
     cursor: pointer;
-    margin-right: 20px;
     display: flex;
     align-items: center;
     transition: color 0.2s;
+    margin-left: auto;         /* прижимаем к правому краю внутри header-right */
 }
+
 .notification-bell:hover {
     color: var(--primary);
 }
+
 .notification-badge {
     position: absolute;
     top: -5px;
     right: -8px;
     font-size: 0.8rem;
-    color: #e74c3c;        /* красный */
+    color: #e74c3c;
     text-shadow: 0 0 4px rgba(231, 76, 60, 0.8);
-    display: none;          /* скрыта по умолчанию */
+    display: none;
     animation: blink 1.2s ease-in-out infinite;
 }
+
 .notification-badge.active {
-    display: inline;        /* показываем, когда есть уведомления */
+    display: inline;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 @keyframes blink {
@@ -710,17 +754,82 @@ footer {
     background-color: #e6fff2;
     border-color: var(--success);
 }
-
+.mobile-menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    color: var(--dark);
+    cursor: pointer;
+    padding: 5px;
+}
 @media (max-width: 768px) {
-    .header-container {
+
+    .mobile-menu-toggle {
+        display: block;    /* показываем только на мобильных */
+    }
+
+    #mainNav {
+        display: none;
+        width: 100%;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: white;
+        box-shadow: var(--shadow);
+        border-radius: 0 0 var(--border-radius) var(--border-radius);
+        z-index: 200;
+    }
+
+    #mainNav.open {
+        display: block;
+    }
+
+    #mainNav ul {
         flex-direction: column;
-        gap: 15px;
+        gap: 0;
+        padding: 10px 0;
+    }
+
+    #mainNav li {
+        flex: none;
+        text-align: left;
+    }
+
+    #mainNav a {
+        display: block;
+        padding: 12px 20px;
+        border-radius: 0;
+        border-bottom: 1px solid var(--light-gray);
+    }
+
+    #mainNav a:last-child {
+        border-bottom: none;
+    }
+
+    .header-container {
+        flex-wrap: wrap;
+        position: relative;
     }
     
+    .logo {
+        margin-right: 0;
+        justify-content: center;
+    }
+
     nav ul {
         flex-wrap: wrap;
         justify-content: center;
-        gap: 15px;
+        gap: 10px;
+    }
+
+    nav li {
+        flex: 0 0 auto;
+    }
+
+    .header-right {
+        justify-content: center;
+        flex-wrap: wrap;
     }
     
     .auth-buttons {

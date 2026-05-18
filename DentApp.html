@@ -15,7 +15,10 @@
                 <i class="fas fa-tooth"></i>
                 <span>DentApp</span>
             </div>
-            <nav>
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Открыть меню">
+                <i class="fas fa-bars"></i>
+            </button>
+            <nav id="mainNav">
                 <ul>
                     <li><a href="#" class="nav-link active" data-page="home">Главная</a></li>
                     <li><a href="#" class="nav-link" data-page="dashboard">Личный кабинет</a></li>
@@ -25,19 +28,21 @@
                     <li><a href="#" class="nav-link" data-page="schedule">Расписание</a></li>
                 </ul>
             </nav>
-            <div class="auth-buttons" id="authButtons">
-                <button class="btn btn-outline" id="loginBtn">Вход</button>
-                <button class="btn btn-primary" id="registerBtn">Регистрация</button>
-            </div>
-            <div class="notification-bell" id="notificationBell" style="display: none;">
-                <i class="fas fa-bell"></i>
-                <span class="notification-badge" id="notificationBadge">●</span>
-            </div>
-            <div class="user-info" id="userInfo" style="display: none;">
-                <div class="user-avatar" id="userAvatar">ИИ</div>
-                <div>
-                    <div id="userName">Иван Иванов</div>
-                    <button class="btn btn-outline btn-sm" id="logoutBtn">Выйти</button>
+            <div class="header-right">
+                <div class="auth-buttons" id="authButtons">
+                    <button class="btn btn-outline" id="loginBtn">Вход</button>
+                    <button class="btn btn-primary" id="registerBtn">Регистрация</button>
+                </div>
+                <div class="user-info" id="userInfo" style="display: none;">
+                    <div class="user-avatar" id="userAvatar">ИИ</div>
+                    <div>
+                        <div id="userName">Иван Иванов</div>
+                        <button class="btn btn-outline btn-sm" id="logoutBtn">Выйти</button>
+                    </div>
+                </div>
+                <div class="notification-bell" id="notificationBell" style="display: none;">
+                    <i class="fas fa-bell"></i>
+                    <span class="notification-badge" id="notificationBadge">●</span>
                 </div>
             </div>
         </div>

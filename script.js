@@ -142,7 +142,23 @@ document.addEventListener('DOMContentLoaded', function() {
         loadDoctors();
         loadServices();
     }
+        // Мобильное меню
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const mainNav = document.getElementById('mainNav');
 
+    if (mobileMenuToggle && mainNav) {
+        mobileMenuToggle.addEventListener('click', () => {
+            mainNav.classList.toggle('open');
+        });
+
+        // Закрывать меню при клике на любой пункт
+        const navLinks = mainNav.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                mainNav.classList.remove('open');
+            });
+        });
+    }
     // Navigation
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', function(e) {
@@ -426,7 +442,7 @@ async function updateDashboard() {
       } else {
         upcomingContainer.innerHTML = '';
         appointments.forEach(app => {
-          if (app.status !== 'scheduled') return; // показываем только активные
+          if (app.status !== 'scheduled') return;
           const div = document.createElement('div');
           div.style.cssText = 'padding:10px; border-bottom:1px solid var(--light-gray);';
           div.innerHTML = `
@@ -438,7 +454,6 @@ async function updateDashboard() {
           upcomingContainer.appendChild(div);
         });
 
-        // Навешиваем обработчики на кнопки отмены
         document.querySelectorAll('.cancel-appointment-btn').forEach(btn => {
           btn.addEventListener('click', async function() {
             const appointmentId = this.getAttribute('data-appointment-id');
@@ -446,8 +461,8 @@ async function updateDashboard() {
               try {
                 await apiRequest(`/appointments/${appointmentId}/cancel`, { method: 'PATCH' });
                 alert('Запись отменена. Пациент получит уведомление.');
-                updateDashboard(); // обновляем список
-                updateNotificationBell(); // если вдруг врач тоже видит колокольчик
+                updateDashboard();
+                updateNotificationBell();
               } catch (err) {
                 alert('Ошибка: ' + err.message);
               }
@@ -458,20 +473,29 @@ async function updateDashboard() {
     } catch (err) {
       console.error('Ошибка загрузки записей врача:', err);
     }
-    return; // врач больше ничего не видит из стандартного дашборда
+    return;
   }
 
-  // Обычное поведение для пациента (уже существующий код)
+  // Обычное поведение для пациента
   try {
     const appointments = await apiRequest('/appointments');
     const upcomingContainer = document.getElementById('upcomingAppointments');
     if (!upcomingContainer) return;
 
-    if (appointments.length === 0) {
+    // Фильтруем только будущие приёмы
+    const now = new Date();
+    const futureAppointments = appointments.filter(app => {
+      if (app.status !== 'scheduled') return false;
+      if (!app.appointment_date || !app.appointment_time) return false;
+      const appDate = new Date(app.appointment_date + 'T' + app.appointment_time);
+      return !isNaN(appDate.getTime()) && appDate > now;
+    });
+
+    if (futureAppointments.length === 0) {
       upcomingContainer.innerHTML = '<p>У вас нет запланированных приемов</p>';
     } else {
       upcomingContainer.innerHTML = '';
-      appointments.forEach(app => {
+      futureAppointments.forEach(app => {
         const div = document.createElement('div');
         let displayDate = app.appointment_date;
         if (displayDate) {
@@ -1050,11 +1074,7 @@ async function updateNotificationBell() {
 
     console.log('Предстоящих за 24ч:', upcoming.length);
 
-    const notifData = await apiRequest('/notifications');
-    const unread = notifData.filter(n => !n.is_read).length;
-    console.log('Непрочитанных уведомлений:', unread);
-
-    if (upcoming.length > 0 || unread > 0) {
+    if (upcoming.length > 0) {
       badge.classList.add('active');
     } else {
       badge.classList.remove('active');
@@ -1119,22 +1139,11 @@ async function loadNotifications() {
       div.innerHTML = `
         <div style="font-size:0.9rem; color:var(--gray);">${new Date(notif.created_at).toLocaleString('ru-RU')}</div>
         <div style="margin-top:5px;">${notif.message}</div>
-        ${!notif.is_virtual ? `<button class="btn btn-outline btn-sm" data-id="${notif.id}" onclick="markNotifRead(${notif.id})" style="margin-top:5px;">✓ Прочитано</button>` : ''}
       `;
       container.appendChild(div);
     });
   } catch (err) {
     console.error('Ошибка загрузки уведомлений', err);
-  }
-}
-
-async function markNotifRead(id) {
-  if (typeof id === 'string' && id.startsWith('appt_')) return;
-  try {
-    await apiRequest(`/notifications/${id}/read`, { method: 'PATCH' });
-    loadNotifications();
-  } catch (e) {
-    console.error(e);
   }
 }
 
