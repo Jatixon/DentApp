@@ -10,7 +10,7 @@ const cron = require('node-cron');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8888;
 
 // Middleware
 app.use(cors());
@@ -425,11 +425,23 @@ app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => 
 });
 
 // ========== CRON-ЗАДАЧА ДЛЯ НАПОМИНАНИЙ ==========
-// ========== CRON-ЗАДАЧА ДЛЯ НАПОМИНАНИЙ ==========
-cron.schedule('0 9 * * *', async () => {
-  console.log(`[CRON] Проверка завтрашних записей в ${new Date().toLocaleString()}`);
+cron.schedule('* * * * *', async () => {
+  console.log(`[CRON] Проверка в ${new Date().toLocaleString()}`);
   try {
-    const tomorrow = new Date();
+    // --- 1. Обработка прошедших приёмов ---
+    const now = new Date();
+    const pastResult = await pool.query(`
+      UPDATE appointments
+      SET status = 'completed', updated_at = NOW()
+      WHERE status = 'scheduled'
+        AND (appointment_date + appointment_time) < NOW() AT TIME ZONE 'Europe/Moscow'
+    `);
+    if (pastResult.rowCount > 0) {
+      console.log(`[CRON] Завершено прошедших приёмов: ${pastResult.rowCount}`);
+    }
+
+    // --- 2. Поиск записей на завтра (напоминания) ---
+    const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const formattedDate = tomorrow.toISOString().split('T')[0];
     console.log(`[CRON] Ищем записи на ${formattedDate}`);
@@ -456,7 +468,7 @@ cron.schedule('0 9 * * *', async () => {
     }
     console.log(`[CRON] Найдено записей на завтра: ${result.rows.length}`);
   } catch (err) {
-    console.error('[CRON] Ошибка при проверке напоминаний:', err);
+    console.error('[CRON] Ошибка:', err);
   }
 }, { timezone: "Europe/Moscow" });
 
