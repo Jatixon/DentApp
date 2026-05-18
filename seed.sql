@@ -26,7 +26,7 @@ INSERT INTO schedule (doctor_id, slot_date, slot_time, is_available)
 SELECT 
   d.id,
   current_date + interval '1 day' * day.day,
-  t.time,
+  t.time::time,
   true
 FROM doctors d
 CROSS JOIN generate_series(0, 13) AS day(day)
